@@ -1,0 +1,12 @@
+# PropFlow — public edge for Render
+#
+# The single internet-facing service. Serves the SPA from the private web
+# container and proxies /auth-api/*, /crm-api/* (incl. socket.io websocket
+# upgrades) to the private auth/crm services. Upstream host:port come from
+# env vars at startup, because Render's private DNS names aren't known at
+# build time.
+FROM nginx:1.27-alpine
+
+COPY docker/edge.conf.template /etc/nginx/templates/edge.conf.template
+ENV NGINX_ENVSUBST_OUTPUT_DIR=/etc/nginx/conf.d
+EXPOSE 80
