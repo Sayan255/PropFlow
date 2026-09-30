@@ -1,0 +1,33 @@
+# PropFlow — auth-server (Node 20 alpine, non-root)
+# Dev-mode runtime: TypeScript runs via tsx so no build step is required and
+# source maps + scripts (migrate/seed/keys) stay available in the image.
+FROM node:20-alpine
+
+ENV NODE_ENV=production
+RUN apk add --no-cache openssl
+
+WORKDIR /app
+
+# Install workspace dependencies for exactly the packages this image needs.
+COPY package.json package-lock.json ./
+COPY packages/shared/package.json packages/shared/
+COPY auth-server/package.json auth-server/
+RUN npm ci --omit=dev --no-audit --no-fund
+
+COPY packages/shared/ packages/shared/
+COPY auth-server/ auth-server/
+COPY docker/entrypoint-auth.sh /usr/local/bin/entrypoint-auth.sh
+RUN chmod +x /usr/local/bin/entrypoint-auth.sh \
+  && mkdir -p /app/keys \
+  && chown -R node:node /app /app/keys
+
+USER node
+# JWT keys live in a mounted volume so rotated/granted keys survive restarts.
+VOLUME ["/app/keys"]
+WORKDIR /app/auth-server
+
+EXPOSE 4001
+HEALTHCHECK --interval=15s --timeout=5s --start-period=25s --retries=5 \
+  CMD node -e "fetch('http://127.0.0.1:4001/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+
+ENTRYPOINT ["/usr/local/bin/entrypoint-auth.sh"]
