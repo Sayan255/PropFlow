@@ -30,10 +30,12 @@ server {
     }
 
     # ── Auth API ────────────────────────────────────────────────────────────
-    # The refresh cookie is path-scoped to /auth-api/auth, so the prefix is
-    # preserved (no rewrite) and the cookie flows back on refresh/logout.
+    # Trailing slash on proxy_pass strips the /auth-api prefix (Vite dev-proxy
+    # parity): /auth-api/auth/refresh → auth sees /auth/refresh. The refresh
+    # cookie is path-scoped to /auth-api/auth, so the browser still matches and
+    # sends it; the proxy forwards it untouched.
     location /auth-api/ {
-        proxy_pass http://auth_upstream;
+        proxy_pass http://auth_upstream/;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -44,7 +46,7 @@ server {
     # Redis-backed limiter inside auth-server).
     location = /auth-api/auth/login {
         limit_req zone=login burst=10 nodelay;
-        proxy_pass http://auth_upstream;
+        proxy_pass http://auth_upstream/;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -52,8 +54,9 @@ server {
     }
 
     # ── CRM API ─────────────────────────────────────────────────────────────
+    # Trailing slash strips the /crm-api prefix (Vite dev-proxy parity).
     location /crm-api/ {
-        proxy_pass http://crm_upstream;
+        proxy_pass http://crm_upstream/;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -62,7 +65,7 @@ server {
 
     # ── Socket.IO websocket upgrade ─────────────────────────────────────────
     location /crm-api/socket.io/ {
-        proxy_pass http://crm_upstream;
+        proxy_pass http://crm_upstream/;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
