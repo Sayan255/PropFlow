@@ -55,7 +55,6 @@ services:
     dockerfilePath: docker/Dockerfile.auth
     dockerContext: .
     plan: 0.5c-512mb
-    healthCheckPath: /health
     envVars:
       - key: NODE_ENV
         value: production
@@ -104,7 +103,6 @@ services:
     dockerfilePath: docker/Dockerfile.crm
     dockerContext: .
     plan: 0.5c-512mb
-    healthCheckPath: /health
     envVars:
       - key: NODE_ENV
         value: production
