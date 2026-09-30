@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Box, Chip, IconButton, InputBase, Paper, Stack, Tooltip, Typography } from '@mui/material';
+import { Alert, Box, Chip, IconButton, InputBase, Paper, Stack, Tooltip, Typography } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { io, type Socket } from 'socket.io-client';
 import { useAppSelector } from '../app/hooks';
+import { doRefresh } from '../app/baseQueryWithReauth';
 
 interface Msg {
   id?: string;
@@ -20,23 +21,41 @@ export default function ChatPanel({ propertyId }: { propertyId: string }) {
   const [messages, setMessages] = useState<Msg[]>([]);
   const [online, setOnline] = useState<string[]>([]);
   const [typing, setTyping] = useState<string | null>(null);
+  const [joined, setJoined] = useState(false);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const socketRef = useRef<Socket | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!accessToken) return;
-    const socket = io('/crm-api', { path: '/crm-api/socket.io', auth: { token: accessToken } });
+    const socket = io({
+      path: '/crm-api/socket.io',
+      auth: { token: accessToken },
+      // crm-api deliberately disables polling; start with its supported transport.
+      transports: ['websocket'],
+    });
     socketRef.current = socket;
 
     socket.on('connect', () => {
+      setConnectionError(null);
+      setJoined(false);
       socket.emit('property:join', { propertyId }, (res: { ok: boolean; messages?: Omit<Msg, 'state'>[]; online?: string[]; error?: string }) => {
         if (res.ok) {
           setMessages((res.messages ?? []).map((m) => ({ ...m, state: 'sent' })));
           setOnline(res.online ?? []);
+          setJoined(true);
+        } else {
+          setConnectionError(res.error ?? 'Could not join this property chat.');
         }
       });
     });
+    socket.on('connect_error', (err: Error) => {
+      setJoined(false);
+      setConnectionError(`Chat connection failed: ${err.message}`);
+      if (err.message === 'unauthorized') void doRefresh();
+    });
+    socket.on('disconnect', () => setJoined(false));
 
     socket.on('chat:new', (m: Omit<Msg, 'state'>) => {
       setMessages((prev) => {
@@ -56,6 +75,7 @@ export default function ChatPanel({ propertyId }: { propertyId: string }) {
     return () => {
       socket.disconnect();
       socketRef.current = null;
+      setJoined(false);
     };
   }, [accessToken, propertyId, me?.id]);
 
@@ -83,6 +103,10 @@ export default function ChatPanel({ propertyId }: { propertyId: string }) {
   const onSend = () => {
     const body = draft.trim();
     if (!body) return;
+    if (!joined || !socketRef.current?.connected) {
+      setConnectionError('Chat is connecting. Please try sending again in a moment.');
+      return;
+    }
     const clientMsgId = crypto.randomUUID();
     setMessages((prev) => [
       ...prev,
@@ -98,8 +122,10 @@ export default function ChatPanel({ propertyId }: { propertyId: string }) {
     <Paper sx={{ p: 2, display: 'flex', flexDirection: 'column', height: 420 }}>
       <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1}>
         <Typography variant="subtitle1" fontWeight={700}>Chat</Typography>
-        <Chip size="small" color={onlineCount > 1 ? 'success' : 'default'} label={`${onlineCount} online`} />
+        <Chip size="small" color={onlineCount > 1 ? 'success' : 'default'} label={joined ? `${onlineCount} online` : 'Connecting…'} />
       </Stack>
+
+      {connectionError && <Alert severity="error" sx={{ mb: 1 }}>{connectionError}</Alert>}
 
       <Box ref={listRef} sx={{ flexGrow: 1, overflowY: 'auto', pr: 1 }}>
         {messages.map((m) => (
@@ -137,7 +163,8 @@ export default function ChatPanel({ propertyId }: { propertyId: string }) {
       <Stack direction="row" spacing={1} mt={1}>
         <InputBase
           fullWidth
-          placeholder="Message…"
+          placeholder={joined ? 'Message…' : 'Connecting to chat…'}
+          disabled={!joined}
           value={draft}
           onChange={(e) => {
             setDraft(e.target.value);
@@ -151,7 +178,7 @@ export default function ChatPanel({ propertyId }: { propertyId: string }) {
           }}
           sx={{ border: 1, borderColor: 'divider', borderRadius: 2, px: 1.5, py: 0.5 }}
         />
-        <IconButton color="primary" onClick={onSend} disabled={!draft.trim()}>
+        <IconButton color="primary" onClick={onSend} disabled={!draft.trim() || !joined}>
           <SendIcon />
         </IconButton>
       </Stack>

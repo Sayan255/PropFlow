@@ -10,6 +10,7 @@ import { STATUS_VALUES, formatINR, pricePerSqft } from '@propflow/shared';
 import { useAppSelector, useAppDispatch } from '../app/hooks';
 import { useDetailQuery, useUpdateMutation } from '../app/api/propertiesApi';
 import { useVisitCreateMutation } from '../app/api/miscApis';
+import { doRefresh } from '../app/baseQueryWithReauth';
 import { showSnack } from '../app/slices/uiSlice';
 import { apiErrorCode, apiErrorMessage, apiErrorDetails, apiErrorStatus } from '../app/apiError';
 
@@ -30,6 +31,9 @@ export default function PropertyDetailPage() {
   const [form, setForm] = useState<{ priceInr: string; status: string; version: number } | null>(null);
   const [conflict, setConflict] = useState<{ latest: Record<string, unknown>; mine: Record<string, unknown> } | null>(null);
   const [noteBody, setNoteBody] = useState('');
+  const [noteError, setNoteError] = useState<string | null>(null);
+  const [noteSending, setNoteSending] = useState(false);
+  const [realtimeReady, setRealtimeReady] = useState(false);
   const socketRef = useRef<Socket | null>(null);
   const [notes, setNotes] = useState<{ id: string; userId: string; body: string; createdAt: string }[]>([]);
 
@@ -39,9 +43,25 @@ export default function PropertyDetailPage() {
 
   useEffect(() => {
     if (!accessToken || !id) return;
-    const socket = io('/crm-api', { path: '/crm-api/socket.io', auth: { token: accessToken } });
+    const socket = io({
+      path: '/crm-api/socket.io',
+      auth: { token: accessToken },
+      // crm-api deliberately disables polling; start with its supported transport.
+      transports: ['websocket'],
+    });
     socketRef.current = socket;
-    socket.on('connect', () => socket.emit('property:join', { propertyId: id }));
+    socket.on('connect', () => {
+      socket.emit('property:join', { propertyId: id }, (res: { ok: boolean; error?: string }) => {
+        setRealtimeReady(res.ok);
+        if (!res.ok) setNoteError(res.error ?? 'Could not join this property room.');
+      });
+    });
+    socket.on('connect_error', (err: Error) => {
+      setRealtimeReady(false);
+      setNoteError(`Live connection failed: ${err.message}`);
+      if (err.message === 'unauthorized') void doRefresh();
+    });
+    socket.on('disconnect', () => setRealtimeReady(false));
     socket.on('note:new', (n: { id: string; userId: string; body: string; createdAt: string }) => {
       setNotes((prev) => (prev.some((p) => p.id === n.id) ? prev : [...prev, n]));
     });
@@ -49,6 +69,7 @@ export default function PropertyDetailPage() {
     return () => {
       socket.disconnect();
       socketRef.current = null;
+      setRealtimeReady(false);
     };
   }, [accessToken, id, refetch]);
 
@@ -191,20 +212,36 @@ export default function PropertyDetailPage() {
               multiline
               minRows={2}
               value={noteBody}
-              onChange={(e) => setNoteBody(e.target.value)}
+              onChange={(e) => { setNoteBody(e.target.value); setNoteError(null); }}
               sx={{ mt: 1 }}
             />
+            {noteError && <Alert severity="error" sx={{ mt: 1 }}>{noteError}</Alert>}
             <Button
               variant="outlined"
               size="small"
               sx={{ mt: 1 }}
+              disabled={!noteBody.trim() || !realtimeReady || noteSending}
               onClick={() => {
-                if (!noteBody.trim()) return;
-                socketRef.current?.emit('note:new', { propertyId: id, body: noteBody.trim() });
-                setNoteBody('');
+                const socket = socketRef.current;
+                const body = noteBody.trim();
+                if (!body || !socket?.connected || !realtimeReady) {
+                  setNoteError('Live connection is not ready. Please wait and try again.');
+                  return;
+                }
+                setNoteSending(true);
+                socket.timeout(5000).emit('note:new', { propertyId: id, body }, (timeoutError: unknown, res: { ok: boolean; note?: { id: string; userId: string; body: string; createdAt: string }; error?: string }) => {
+                  setNoteSending(false);
+                  if (timeoutError || !res?.ok || !res.note) {
+                    setNoteError(res?.error ?? 'Note could not be saved. Please retry.');
+                    return;
+                  }
+                  setNotes((prev) => prev.some((note) => note.id === res.note!.id) ? prev : [...prev, res.note!]);
+                  setNoteBody('');
+                  setNoteError(null);
+                });
               }}
             >
-              Add note (live)
+              {noteSending ? 'Adding…' : 'Add note'}
             </Button>
           </Paper>
 
