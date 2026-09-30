@@ -115,7 +115,13 @@ adminRouter.get('/security/events', (req, res, next) => {
     .then(async (payload) => {
       requireSuperAdmin(payload);
       const raw = await redis.lrange('security:events', 0, 99);
-      res.json({ events: raw.map((r) => JSON.parse(r)) });
+      const events = raw.map((r) => JSON.parse(r) as { userId?: string });
+      const userIds = [...new Set(events.map((event) => event.userId).filter((id): id is string => Boolean(id)))];
+      const users = userIds.length
+        ? await User.findAll({ where: { id: userIds }, attributes: ['id', 'name', 'email'] })
+        : [];
+      const usersById = new Map(users.map((user) => [user.id, { name: user.name, email: user.email }]));
+      res.json({ events: events.map((event) => ({ ...event, user: event.userId ? usersById.get(event.userId) ?? null : null })) });
     })
     .catch(next);
 });

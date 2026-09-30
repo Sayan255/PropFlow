@@ -100,6 +100,24 @@ export default function AppLayout() {
           <IconButton edge="start" onClick={() => setMobileOpen(!mobileOpen)} sx={{ mr: 2, display: { md: 'none' } }}>
             <MenuIcon />
           </IconButton>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, whiteSpace: 'nowrap' }}>
+            <Box
+              sx={{
+                width: 32,
+                height: 32,
+                display: 'grid',
+                placeItems: 'center',
+                borderRadius: 1.5,
+                bgcolor: 'primary.main',
+                color: 'primary.contrastText',
+              }}
+            >
+              <ApartmentIcon fontSize="small" />
+            </Box>
+            <Typography variant="h6" fontWeight={800} color="primary.main">
+              PropFlow
+            </Typography>
+          </Box>
           <Box sx={{ flexGrow: 1 }} />
           <Tooltip title="Toggle theme">
             <IconButton onClick={() => dispatch(toggleMode())}>

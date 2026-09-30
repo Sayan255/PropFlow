@@ -7,6 +7,8 @@ import { redis } from './redis.ts';
 
 const JWKS_CACHE_KEY = 'jwks';
 const JWKS_TTL_SECONDS = 300;
+const ACTIVE_KID_KEY = 'jwt:active-kid';
+const PRIVATE_KEY_PREFIX = 'jwt:private:';
 
 type ImportedKey = Awaited<ReturnType<typeof importPKCS8>>;
 
@@ -20,6 +22,19 @@ function importKeyPair(privatePem: string, publicPem: string) {
 
 /** Ensures the configured signing key is imported and registered in DB + JWKS. */
 export async function ensureSigningKey(): Promise<void> {
+  const persistedKid = await redis.get(ACTIVE_KID_KEY);
+  if (persistedKid) {
+    const [row, privatePem] = await Promise.all([
+      SigningKey.findByPk(persistedKid),
+      redis.get(`${PRIVATE_KEY_PREFIX}${persistedKid}`),
+    ]);
+    if (row && privatePem) {
+      const { privateKey, publicKey } = await importKeyPair(privatePem, row.publicKeyPem);
+      currentKey = { kid: persistedKid, privateKey, publicKey };
+      await refreshJwksCache();
+      return;
+    }
+  }
   if (!config.jwt.privateKey || !config.jwt.publicKey) {
     throw new Error('Signing keys are not configured. Run `npm run keys:generate -w auth-server` in development.');
   }
@@ -32,6 +47,8 @@ export async function ensureSigningKey(): Promise<void> {
       { transaction: t },
     ),
   );
+  await redis.set(`${PRIVATE_KEY_PREFIX}${currentKey.kid}`, config.jwt.privateKey);
+  await redis.set(ACTIVE_KID_KEY, currentKey.kid);
   await refreshJwksCache();
 }
 
@@ -82,6 +99,16 @@ export async function signAccessToken(claims: {
   iat: number;
   exp: number;
 }): Promise<string> {
+  const activeKid = await redis.get(ACTIVE_KID_KEY);
+  if (activeKid && currentKey?.kid !== activeKid) {
+    const [row, privatePem] = await Promise.all([
+      SigningKey.findByPk(activeKid),
+      redis.get(`${PRIVATE_KEY_PREFIX}${activeKid}`),
+    ]);
+    if (!row || !privatePem) throw new Error(`Active signing key ${activeKid} is unavailable`);
+    const { privateKey, publicKey } = await importKeyPair(privatePem, row.publicKeyPem);
+    currentKey = { kid: activeKid, privateKey, publicKey };
+  }
   if (!currentKey) throw new Error('Signing key not initialized');
   const { privateKey } = currentKey;
   return new SignJWT({ tid: claims.tid, role: claims.role, jti: claims.jti })
@@ -108,6 +135,8 @@ export async function rotateSigningKeys(): Promise<{ newKid: string }> {
   });
 
   currentKey = { kid, privateKey: priv, publicKey: pub };
+  await redis.set(`${PRIVATE_KEY_PREFIX}${kid}`, privateKeyPem);
+  await redis.set(ACTIVE_KID_KEY, kid);
   await refreshJwksCache();
   return { newKid: kid };
 }

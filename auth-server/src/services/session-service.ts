@@ -114,10 +114,11 @@ export async function revokeFamily(familyId: string): Promise<void> {
   await redis.del(famKey(familyId));
 }
 
-export async function revokeToken(token: string): Promise<void> {
+export async function revokeToken(token: string): Promise<SessionUser | null> {
   const entry = await readEntry(token);
-  if (!entry) return;
+  if (!entry) return null;
   await redis.del(rtKey(token));
+  return { sub: entry.userId, tid: entry.tenantId, role: entry.role };
 }
 
 /** Revokes every refresh token of a user across all families (logout-all). */

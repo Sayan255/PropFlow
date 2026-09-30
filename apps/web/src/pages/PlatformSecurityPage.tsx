@@ -57,12 +57,21 @@ export default function PlatformSecurityPage() {
           <TableBody>
             {isLoading && <TableRow><TableCell colSpan={4}>Loading…</TableCell></TableRow>}
             {(data?.events ?? []).map((rawEvent: unknown, i) => {
-              const e = rawEvent as { at: string; type: string; userId?: string; ip?: string };
+              const e = rawEvent as {
+                at: string;
+                type: string;
+                userId?: string;
+                user?: { name?: string; email?: string } | null;
+                ip?: string;
+              };
               return (
                 <TableRow key={i}>
                   <TableCell>{new Date(e.at).toLocaleString('en-IN')}</TableCell>
                   <TableCell>{e.type}</TableCell>
-                  <TableCell>{e.userId ?? '—'}</TableCell>
+                  <TableCell>
+                    {e.user?.name ?? e.user?.email ?? (e.userId ? `Unknown account (${e.userId})` : '—')}
+                    {e.user?.name && e.user.email ? ` · ${e.user.email}` : ''}
+                  </TableCell>
                   <TableCell>{e.ip ?? '—'}</TableCell>
                 </TableRow>
               );

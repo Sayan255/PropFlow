@@ -146,8 +146,8 @@ authRouter.post(
   wrap(async (req, res) => {
     const token = readRefreshCookie(req);
     if (token) {
-      await revokeToken(token);
-      await recordSecurityEvent({ type: 'LOGOUT', ip: clientIp(req) });
+      const user = await revokeToken(token);
+      if (user) await recordSecurityEvent({ type: 'LOGOUT', userId: user.sub, tenantId: user.tid, ip: clientIp(req) });
     }
     clearRefreshCookie(res);
     res.status(204).send();
