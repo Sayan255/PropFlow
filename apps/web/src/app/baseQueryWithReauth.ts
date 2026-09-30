@@ -87,19 +87,34 @@ export interface AuthResponse {
 
 /** Direct fetch helper for auth endpoints (login/refresh cookie flow). */
 export async function authFetch(path: string, body?: unknown, method = 'POST'): Promise<{ status: number; data: AuthResponse }> {
-  const res = await fetch(`${API_ORIGIN}${AUTH_BASE}${path}`, {
-    method,
-    credentials: 'include',
-    headers: body ? { 'content-type': 'application/json' } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_ORIGIN}${AUTH_BASE}${path}`, {
+      method,
+      credentials: 'include',
+      headers: body ? { 'content-type': 'application/json' } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch {
+    return {
+      status: 0,
+      data: { error: { code: 'NETWORK_ERROR', message: 'Cannot reach the API server. Check your internet connection or whether the backend is deployed.' } },
+    };
+  }
   let data: AuthResponse = {};
   const text = await res.text();
   if (text) {
     try {
       data = JSON.parse(text) as AuthResponse;
     } catch {
-      data = { error: { message: text } } as AuthResponse;
+      // Non-JSON body (e.g. an SPA fallback served for an API path when the
+      // backend is missing). Surface a clean message instead of raw HTML.
+      data = {
+        error: {
+          code: 'BAD_RESPONSE',
+          message: 'The API returned an unexpected response (page instead of JSON). The backend services are probably not deployed yet.',
+        },
+      };
     }
   }
   return { status: res.status, data };
