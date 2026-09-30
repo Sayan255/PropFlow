@@ -63,12 +63,12 @@ Use this layout if you want zero cookie/CORS friction.
 ### Layout B — split (Firebase SPA + separate API host)
 
 1. Deploy the backends (Render blueprint, VM, etc.) and note the public API base,
-   e.g. `https://propflow-api.onrender.com`.
+   e.g. `https://propflow-edge.onrender.com` (use the exact public edge URL shown in Render).
 
 2. Build with the API origin baked in and deploy:
 
    ```bash
-   VITE_API_ORIGIN=https://propflow-api.onrender.com npm run deploy:web
+   VITE_API_ORIGIN=https://propflow-edge.onrender.com npm run deploy:web
    ```
 
 3. On the backend(s) allow the Firebase origin:

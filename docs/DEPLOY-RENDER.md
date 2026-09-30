@@ -50,8 +50,8 @@ Render Dashboard → **New +** → **Blueprint** → pick this repo. Render pars
 |---|---|
 | `MYSQL_PASSWORD` | a strong password (save it — auth/crm use the same value) |
 | `MYSQL_ROOT_PASSWORD` | a different strong password |
-| `CORS_ORIGIN` (auth + crm) | `https://propflow-edge.onrender.com` (or your custom domain) |
-| `FRONTEND_URL` (auth) | same URL as above |
+| `CORS_ORIGIN` (auth + crm) | For Firebase Hosting: `https://propflow-38327.web.app,https://propflow-38327.firebaseapp.com`. If users open the Render-hosted SPA, use the Render edge URL instead. |
+| `FRONTEND_URL` (auth) | The URL users open; for Firebase Hosting, `https://propflow-38327.web.app` |
 | `SEED_PASSWORD` | the password for all 9 demo accounts (e.g. keep `Password123!` for a demo) |
 | `JWT_PRIVATE_KEY` / `JWT_PUBLIC_KEY` | the `\n`-escaped PEM strings from above |
 
@@ -68,11 +68,11 @@ curl -s $EDGE/auth-api/health | head -c 200 # → {"status":"ok",...}
 curl -s $EDGE/crm-api/health | head -c 200  # → {"status":"ok",...}
 ```
 
-Then open the edge URL in a browser and log in as `admin@tenant-a.local` with your `SEED_PASSWORD`.
+If using the Render-hosted SPA, open the edge URL and log in as `admin@tenant-a.local` with your `SEED_PASSWORD`. For Firebase Hosting, build the SPA with `VITE_API_ORIGIN=https://propflow-edge.onrender.com` and open the Firebase URL.
 
 ### 4. Custom domain (optional but recommended)
 
-Edge service → **Settings → Custom Domains** → add your domain. Render provisions TLS automatically. Then update `CORS_ORIGIN` and `FRONTEND_URL` on auth + crm to the new URL and **Manual Deploy** both so cookies/CORS match the browser origin.
+Edge service → **Settings → Custom Domains** → add your domain. Render provisions TLS automatically. Set `CORS_ORIGIN` and `FRONTEND_URL` to the origin users actually open, then **Manual Deploy** auth and crm so cookies and CORS match the browser origin.
 
 ## Costs (honest)
 

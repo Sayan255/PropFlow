@@ -86,7 +86,7 @@ services:
       - key: COOKIE_SAME_SITE
         value: "none"       # cookie is scoped to /auth-api/auth; path does the isolation
       - key: CORS_ORIGIN
-        sync: false         # your Render URL, e.g. https://propflow-edge.onrender.com
+        sync: false         # Firebase frontend origins, comma-separated (web.app and firebaseapp.com)
       - key: FRONTEND_URL
         sync: false
       - key: SEED_PASSWORD
