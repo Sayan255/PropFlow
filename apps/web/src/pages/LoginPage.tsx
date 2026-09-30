@@ -5,7 +5,7 @@ import {
 } from '@mui/material';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { loginSchema, DEFAULT_LANDING_BY_ROLE, type Role } from '@propflow/shared';
+import { loginSchema, DEFAULT_LANDING_BY_ROLE, roleHas, type Role } from '@propflow/shared';
 import { authFetch } from '../app/baseQueryWithReauth';
 import { credentialsReceived } from '../app/slices/authSlice';
 import { useAppDispatch } from '../app/hooks';
@@ -13,6 +13,24 @@ import { useAppDispatch } from '../app/hooks';
 interface FormShape {
   email: string;
   password: string;
+}
+
+function roleCanOpenPath(role: Role, target: string): boolean {
+  if (!target.startsWith('/') || target.startsWith('//')) return false;
+  const path = target.split(/[?#]/, 1)[0];
+  if (path === '/dashboard') return roleHas(role, 'dashboard:view');
+  if (path === '/properties') return roleHas(role, 'property:listAll');
+  if (path === '/properties/new') return roleHas(role, 'property:create');
+  if (/^\/properties\/[^/]+$/.test(path)) {
+    return roleHas(role, 'property:listAll') || roleHas(role, 'property:chat');
+  }
+  if (path === '/my-properties') return ['ADMIN', 'MANAGER', 'AGENT'].includes(role);
+  if (path === '/site-visits') return roleHas(role, 'property:visits');
+  if (path === '/admin/users') return roleHas(role, 'users:manage');
+  if (path === '/admin/master-data') return roleHas(role, 'masterdata:manage');
+  if (path === '/platform/tenants') return roleHas(role, 'platform:tenants');
+  if (path === '/platform/security') return roleHas(role, 'platform:security');
+  return false;
 }
 
 export default function LoginPage() {
@@ -43,7 +61,11 @@ export default function LoginPage() {
       const { status, data } = await authFetch('/auth/login', values);
       if (status === 200 && data.accessToken && data.user) {
         dispatch(credentialsReceived({ accessToken: data.accessToken, user: data.user, expiresIn: data.expiresIn }));
-        navigate(next || DEFAULT_LANDING_BY_ROLE[data.user.role as Role] || '/dashboard', { replace: true });
+        const role = data.user.role as Role;
+        const destination = next && roleCanOpenPath(role, next)
+          ? next
+          : DEFAULT_LANDING_BY_ROLE[role] || '/dashboard';
+        navigate(destination, { replace: true });
         return;
       }
       const code = data?.error?.code;

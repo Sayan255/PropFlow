@@ -7,16 +7,18 @@ import { ah } from '../util/async-handler.js';
 import { getDashboard } from '../services/dashboard-service.js';
 import { redis } from '../redis.js';
 import { AuthUser } from '../services/auth-users.js';
-import { unprocessable } from '../util/errors.js';
+import { forbidden, unprocessable } from '../util/errors.js';
 
 export const dashboardRouter = Router();
-dashboardRouter.use(authenticate, tenantScope);
+dashboardRouter.use(authenticate);
 
 dashboardRouter.get(
   '/',
   authorize('dashboard:view'),
   validateQuery(dashboardQuerySchema),
   ah(async (req, res) => {
+    const isPlatformAdmin = req.user.role === 'SUPER_ADMIN' && req.user.tid === null;
+    if (!isPlatformAdmin && !req.user.tid) throw forbidden('Tenant scope required');
     const data = await getDashboard(req.user.tid, req.parsedQuery.from, req.parsedQuery.to);
     res.json(data);
   }),

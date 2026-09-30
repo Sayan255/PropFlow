@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { slugify } from '@propflow/shared';
+import { registerTenantSchema, slugify } from '@propflow/shared';
 import { Tenant, User } from '../db/models.ts';
 import { validateBody } from '../http/validate.ts';
 import { conflict, forbidden, unauthorized } from '../http/errors.ts';
@@ -36,12 +36,8 @@ async function authPayload(req: { headers: Record<string, unknown> }): Promise<{
   return payload as unknown as { sub: string; tid: string | null; role: string };
 }
 
-const createTenantSchema = z.object({
-  companyName: z.string().trim().min(2).max(120),
-  slug: z.string().trim().toLowerCase().regex(/^[a-z0-9]([a-z0-9-]{1,38})[a-z0-9]$/).optional(),
-  adminName: z.string().trim().min(2).max(120),
-  adminEmail: z.string().trim().toLowerCase().email(),
-  adminPassword: z.string().min(10).max(128),
+const createTenantSchema = registerTenantSchema.extend({
+  slug: registerTenantSchema.shape.slug.optional(),
 });
 
 adminRouter.get('/platform/tenants', (req, res, next) => {
