@@ -75,6 +75,12 @@ export const propertiesApi = createApi({
       query: (id) => ({ url: `/properties/${id}`, method: 'DELETE' }),
       invalidatesTags: [{ type: 'PropertyList', id: 'LIST' }],
     }),
+    export: build.mutation<Blob, Record<string, unknown>>({
+      query: (params) => ({
+        url: `/properties/export${propertyQueryString(params)}`,
+        responseHandler: (response) => response.blob(),
+      }),
+    }),
     bulk: build.mutation<{ updated: number }, { ids: string[]; operation: Record<string, unknown> }>({
       query: (body) => ({ url: '/properties/bulk', method: 'POST', body }),
       invalidatesTags: [{ type: 'PropertyList', id: 'LIST' }],
@@ -88,5 +94,6 @@ export const {
   useCreateMutation,
   useUpdateMutation,
   useRemoveMutation,
+  useExportMutation,
   useBulkMutation,
 } = propertiesApi;

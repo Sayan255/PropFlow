@@ -18,8 +18,8 @@ export async function attachRealtime(httpServer) {
     transports: ['websocket'],
   });
 
-  const pub = redis.duplicate();
-  const sub = redis.duplicate();
+  const pub = redis.duplicate({ lazyConnect: true });
+  const sub = redis.duplicate({ lazyConnect: true });
   await Promise.all([pub.connect(), sub.connect()]);
   io.adapter(createAdapter(pub, sub));
 

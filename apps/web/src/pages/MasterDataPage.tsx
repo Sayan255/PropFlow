@@ -1,41 +1,33 @@
 import { useState } from 'react';
 import {
-  Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Paper, Stack, Tab, Tabs,
+  Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Paper, Snackbar, Stack, Tab, Tabs,
   TextField, Typography,
 } from '@mui/material';
-import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/DeleteOutline';
 import ArrowUpIcon from '@mui/icons-material/ArrowUpward';
 import ArrowDownIcon from '@mui/icons-material/ArrowDownward';
 import { MASTER_KINDS, type MasterKind } from '@propflow/shared';
-import { useMasterDataQuery, useMasterCreateMutation, useMasterUpdateMutation, useMasterRemoveMutation } from '../app/api/miscApis';
-import { useAppDispatch } from '../app/hooks';
-import { apiErrorMessage, apiErrorStatus } from '../app/apiError';
-import { showSnack } from '../app/slices/uiSlice';
+import { useMasterDataQuery, useMasterUpdateMutation, useMasterRemoveMutation } from '../app/api/miscApis';
+import { useAppDispatch, useAppSelector } from '../app/hooks';
+import { apiErrorStatus } from '../app/apiError';
+import { clearSnack, showSnack } from '../app/slices/uiSlice';
 
 export default function MasterDataPage() {
   const dispatch = useAppDispatch();
+  const snack = useAppSelector((s) => s.ui.snack);
   const [kind, setKind] = useState<MasterKind>('LOCALITY');
   const { data, refetch } = useMasterDataQuery({ kind });
-  const [create] = useMasterCreateMutation();
   const [update] = useMasterUpdateMutation();
   const [remove] = useMasterRemoveMutation();
 
-  const [newLabel, setNewLabel] = useState('');
+  const [search, setSearch] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; label: string } | null>(null);
 
   const items = (data?.data ?? []).slice().sort((a, b) => a.sortOrder - b.sortOrder);
-
-  const addItem = async () => {
-    if (!newLabel.trim()) return;
-    try {
-      await create({ kind, label: newLabel.trim(), value: newLabel.trim(), sortOrder: items.length, active: true }).unwrap();
-      setNewLabel('');
-      refetch();
-    } catch (e) {
-      dispatch(showSnack({ message: apiErrorMessage(e, 'Create failed'), severity: 'error' }));
-    }
-  };
+  const normalizedSearch = search.trim().toLocaleLowerCase();
+  const visibleItems = normalizedSearch
+    ? items.filter((item) => `${item.label} ${item.value}`.toLocaleLowerCase().includes(normalizedSearch))
+    : items;
 
   const tryDelete = async (id: string) => {
     try {
@@ -80,17 +72,15 @@ export default function MasterDataPage() {
         <Stack direction="row" spacing={1} mb={2}>
           <TextField
             size="small"
-            label={`New ${kind.replace('_', ' ').toLowerCase()} label`}
-            value={newLabel}
-            onChange={(e) => setNewLabel(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && addItem()}
+            label={`Search ${kind.replace('_', ' ').toLowerCase()}`}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
           />
-          <Button variant="contained" startIcon={<AddIcon />} onClick={addItem}>
-            Add
-          </Button>
         </Stack>
 
-        {items.map((item, i) => (
+        {visibleItems.map((item) => {
+          const i = items.findIndex((entry) => entry.id === item.id);
+          return (
           <Stack key={item.id} direction="row" alignItems="center" spacing={1} py={0.75} borderBottom={1} borderColor="divider">
             <Typography flex={1}>{item.label}</Typography>
             <Chip size="small" label={item.active ? 'active' : 'inactive'} color={item.active ? 'success' : 'default'} />
@@ -111,8 +101,9 @@ export default function MasterDataPage() {
               <DeleteIcon fontSize="small" />
             </Button>
           </Stack>
-        ))}
-        {items.length === 0 && <Box py={4} textAlign="center"><Typography color="text.secondary">No items yet.</Typography></Box>}
+          );
+        })}
+        {visibleItems.length === 0 && <Box py={4} textAlign="center"><Typography color="text.secondary">{items.length ? 'No matching items.' : 'No items yet.'}</Typography></Box>}
       </Paper>
 
       <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)}>
@@ -127,6 +118,12 @@ export default function MasterDataPage() {
           <Button color="error" onClick={() => deleteTarget && tryDelete(deleteTarget.id)}>Delete</Button>
         </DialogActions>
       </Dialog>
+      <Snackbar
+        open={!!snack}
+        message={snack?.message ?? ''}
+        autoHideDuration={4000}
+        onClose={() => dispatch(clearSnack())}
+      />
       <Box pb={4} />
     </Stack>
   );

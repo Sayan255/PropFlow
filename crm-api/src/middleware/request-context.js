@@ -1,4 +1,4 @@
-import { logger } from './logger.js';
+import { logger } from '../logger.js';
 
 /** requestId + structured HTTP logging. */
 export function attachRequestId(req, res, next) {

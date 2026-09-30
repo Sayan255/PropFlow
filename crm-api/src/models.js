@@ -1,6 +1,8 @@
 import { DataTypes, Model } from 'sequelize';
 import { sequelize } from './db.js';
 
+export { sequelize };
+
 /** Property: BIGINT id + price (integer rupees); unique (tenant, building, unit); optimistic-lock version. */
 export class Property extends Model {}
 Property.init(

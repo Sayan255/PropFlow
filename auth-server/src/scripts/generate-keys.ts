@@ -13,3 +13,6 @@ fs.writeFileSync(path.join(keysDir, 'dev-public.pem'), publicKeyPem);
 fs.writeFileSync(path.join(keysDir, '.gitkeep'), '');
 /* eslint-disable-next-line no-console */
 console.log(`Wrote dev signing keys to ${keysDir}`);
+// Importing the shared key helpers also initializes Redis; this one-off script
+// should release the container entrypoint instead of keeping that client alive.
+process.exit(0);

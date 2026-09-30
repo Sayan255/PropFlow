@@ -53,7 +53,8 @@ npm run dev:web     # Vite dev server on :5173
 Open **http://localhost:5173**. The Vite dev server proxies `/auth-api/*` and `/crm-api/*` to the backends, so the SPA talks to everything same-origin (that matters for the refresh cookie — see below).
 
 ### Demo accounts
-
+(email id: admin@tenant-a.local
+password: Password123!)
 Password for all of them: **`Password123!`**
 
 | Email | Role | Tenant |

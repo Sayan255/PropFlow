@@ -129,8 +129,9 @@ authRouter.post(
     if (!token) throw unauthorized('Missing refresh token');
     try {
       const result = await rotateRefreshToken(token);
+      const access = await issueAccessToken(result.user);
       setRefreshCookie(res, result.newToken);
-      res.status(200).json({ accessToken: result.accessToken, expiresIn: result.expiresIn, user: result.user });
+      res.status(200).json({ accessToken: access.token, expiresIn: access.expiresIn });
     } catch (err) {
       clearRefreshCookie(res);
       throw err;

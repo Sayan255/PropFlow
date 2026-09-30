@@ -6,7 +6,8 @@ import {
 } from '@mui/material';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
-import { useUsersQuery, useInviteMutation, useChangeRoleMutation, useSetUserStatusMutation } from '../app/api/authApi';
+import { useInviteMutation } from '../app/api/authApi';
+import { useUsersQuery, useChangeRoleMutation, useSetUserStatusMutation } from '../app/api/usersApi';
 import { useAppDispatch, useAppSelector } from '../app/hooks';
 import { clearSnack, showSnack } from '../app/slices/uiSlice';
 import { apiErrorMessage, apiErrorCode, apiErrorStatus } from '../app/apiError';

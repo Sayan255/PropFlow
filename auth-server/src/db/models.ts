@@ -107,5 +107,5 @@ SigningKey.init(
     publicKeyPem: { type: DataTypes.TEXT, allowNull: false },
     active: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
   },
-  { sequelize, modelName: 'SigningKey', tableName: 'signing_keys' },
+  { sequelize, modelName: 'SigningKey', tableName: 'signing_keys', updatedAt: false },
 );

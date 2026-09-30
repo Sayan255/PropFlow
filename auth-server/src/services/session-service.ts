@@ -12,10 +12,8 @@ export interface SessionUser {
 }
 
 export interface RefreshResult {
-  accessToken: string;
   user: SessionUser;
   newToken: string;
-  expiresIn: number;
 }
 
 function sha256(value: string): string {
@@ -105,10 +103,8 @@ export async function rotateRefreshToken(token: string): Promise<RefreshResult> 
     expiresAt,
   });
   return {
-    accessToken: '',
     user: { sub: entry.userId, tid: entry.tenantId, role: entry.role },
     newToken: nextToken,
-    expiresIn: 60,
   };
 }
 

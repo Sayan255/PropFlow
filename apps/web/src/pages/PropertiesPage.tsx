@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 // DataGrid toolbar is rendered by the page itself (bulk controls live in the page header)
-import { useSearchParams } from 'react-router-dom';
+import { Link as RouterLink, useSearchParams } from 'react-router-dom';
 import {
   Box, Button, Chip, Container, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle,
   Drawer, FormControl, IconButton, InputLabel, MenuItem, Select, Stack, TextField, Tooltip, Typography,
@@ -14,7 +14,7 @@ import {
 } from '@mui/x-data-grid';
 import { STATUS_VALUES, LISTING_TYPES, PROPERTY_TYPES, BHK_VALUES, formatINR, roleHas, type Permission } from '@propflow/shared';
 import { useAppDispatch, useAppSelector } from '../app/hooks';
-import { useListQuery, useBulkMutation } from '../app/api/propertiesApi';
+import { useListQuery, useBulkMutation, useExportMutation } from '../app/api/propertiesApi';
 import { showSnack, setColumnVisibility } from '../app/slices/uiSlice';
 import { apiErrorMessage } from '../app/apiError';
 import { formatInZone } from '@propflow/shared';
@@ -55,6 +55,7 @@ export default function PropertiesPage() {
 
   const { data, isLoading, isFetching, isError, refetch } = useListQuery(query);
   const [bulk] = useBulkMutation();
+  const [exportProperties, { isLoading: isExporting }] = useExportMutation();
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkDialog, setBulkDialog] = useState<null | 'status' | 'reassign'>(null);
@@ -95,13 +96,21 @@ export default function PropertiesPage() {
   const paginationModel: GridPaginationModel = { page: page - 1, pageSize };
   const sortModel: GridSortModel = [{ field: sortBy, sort: sortDir as 'asc' | 'desc' }];
 
-  const exportUrl = useMemo(() => {
-    const sp = new URLSearchParams();
-    for (const [k, v] of Object.entries(filters)) if (v) sp.set(k, v);
-    sp.set('sortBy', sortBy);
-    sp.set('sortDir', sortDir);
-    return `/crm-api/properties/export?${sp.toString()}`;
-  }, [filters, sortBy, sortDir]);
+  const handleExport = async () => {
+    try {
+      const blob = await exportProperties({ ...filters, sortBy, sortDir }).unwrap();
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = `propflow-export-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+    } catch (error) {
+      dispatch(showSnack({ message: apiErrorMessage(error, 'Export failed'), severity: 'error' }));
+    }
+  };
 
   const canExport = user ? roleHas(user.role, 'property:export' as Permission) : false;
   const canBulk = user ? roleHas(user.role, 'property:bulk' as Permission) : false;
@@ -121,13 +130,13 @@ export default function PropertiesPage() {
           <IconButton onClick={() => refetch()}><RefreshIcon /></IconButton>
           {canExport && (
             <Tooltip title="Export current filtered view (XLSX)">
-              <Button variant="outlined" startIcon={<FileDownloadIcon />} href={exportUrl} disabled={isFetching}>
-                Export
+              <Button variant="outlined" startIcon={<FileDownloadIcon />} onClick={handleExport} disabled={isFetching || isExporting}>
+                {isExporting ? 'Exporting…' : 'Export'}
               </Button>
             </Tooltip>
           )}
           {user && roleHas(user.role, 'property:create' as Permission) && (
-            <Button variant="contained" startIcon={<AddIcon />} href="#/properties/new">
+            <Button variant="contained" startIcon={<AddIcon />} component={RouterLink} to="/properties/new">
               New property
             </Button>
           )}

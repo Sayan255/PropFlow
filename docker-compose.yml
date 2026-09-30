@@ -19,6 +19,7 @@ services:
       - "3306:3306"
     volumes:
       - mysql-data:/var/lib/mysql
+      - ./docker/mysql-init.sh:/docker-entrypoint-initdb.d/01-provision.sh:ro
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-root-dev-password}"]
       interval: 5s
@@ -44,7 +45,7 @@ services:
       context: .
       dockerfile: docker/Dockerfile.auth
     environment:
-      NODE_ENV: production
+      NODE_ENV: development
       LOG_LEVEL: ${LOG_LEVEL:-info}
       MYSQL_HOST: mysql
       MYSQL_PORT: 3306

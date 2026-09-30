@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useBlocker } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { apiErrorCode, apiErrorDetails, apiErrorMessage } from '../app/apiError';
 import {
   Alert, Button, Card, CardContent, Chip, CircularProgress, FormControl, FormHelperText, InputLabel,
@@ -43,7 +43,6 @@ export default function PropertyFormPage() {
   const [dupWarn, setDupWarn] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
   const [confirmLeave, setConfirmLeave] = useState(false);
-  const [blockedPath, setBlockedPath] = useState<string | null>(null);
 
   const {
     control,
@@ -76,17 +75,15 @@ export default function PropertyFormPage() {
 
   useEffect(() => setDirty(isDirty), [isDirty]);
 
-  const blocker = useBlocker(({ currentLocation, nextLocation }) => {
-    if (confirmLeave) return false;
-    return dirty && currentLocation.pathname !== nextLocation.pathname;
-  });
-
   useEffect(() => {
-    if (blocker.state === 'blocked') {
-      setBlockedPath(blocker.location.pathname);
-      setConfirmLeave(true);
-    }
-  }, [blocker.state]);
+    if (!dirty) return;
+    const warnBeforeClose = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warnBeforeClose);
+    return () => window.removeEventListener('beforeunload', warnBeforeClose);
+  }, [dirty]);
 
   const listingType = watch('listingType');
   const price = Number(watch('priceInr') || 0);
@@ -274,7 +271,7 @@ export default function PropertyFormPage() {
         </Card>
 
         <Stack direction="row" justifyContent="flex-end" spacing={1} pb={4}>
-          <Button onClick={() => navigate(-1)}>Cancel</Button>
+          <Button onClick={() => (dirty ? setConfirmLeave(true) : navigate('/properties'))}>Cancel</Button>
           <Button type="submit" variant="contained" disabled={isLoading}>
             {isLoading ? <CircularProgress size={22} /> : 'Create property'}
           </Button>
@@ -287,13 +284,13 @@ export default function PropertyFormPage() {
           <Typography>Your changes have not been saved.</Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => { setConfirmLeave(false); blocker.reset?.(); }}>Stay</Button>
+          <Button onClick={() => setConfirmLeave(false)}>Stay</Button>
           <Button
             color="warning"
             onClick={() => {
               setDirty(false);
               setConfirmLeave(false);
-              if (blockedPath) navigate(blockedPath);
+              navigate('/properties');
             }}
           >
             Leave

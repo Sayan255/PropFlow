@@ -5,6 +5,7 @@ import { masterDataApi } from './api/miscApis';
 import { siteVisitsApi } from './api/miscApis';
 import { dashboardApi } from './api/miscApis';
 import { platformApi } from './api/miscApis';
+import { usersApi } from './api/usersApi';
 import auth from './slices/authSlice';
 import ui from './slices/uiSlice';
 
@@ -16,10 +17,20 @@ export const store = configureStore({
     [siteVisitsApi.reducerPath]: siteVisitsApi.reducer,
     [dashboardApi.reducerPath]: dashboardApi.reducer,
     [platformApi.reducerPath]: platformApi.reducer,
+    [usersApi.reducerPath]: usersApi.reducer,
     auth,
     ui,
   },
-  middleware: (getDefault) => getDefault().concat(authApi.middleware),
+  middleware: (getDefault) =>
+    getDefault().concat(
+      authApi.middleware,
+      propertiesApi.middleware,
+      masterDataApi.middleware,
+      siteVisitsApi.middleware,
+      dashboardApi.middleware,
+      platformApi.middleware,
+      usersApi.middleware,
+    ),
 });
 
 export type RootState = ReturnType<typeof store.getState>;

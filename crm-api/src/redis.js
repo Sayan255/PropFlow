@@ -1,9 +1,16 @@
 import { Redis } from 'ioredis';
-import config from '../config.js';
+import config from './config.js';
 import { logger } from './logger.js';
 
 export const redis = new Redis(config.redisUrl, { maxRetriesPerRequest: null });
 export const redisDup = () => redis.duplicate();
+export async function redisPing() {
+  try {
+    return (await redis.ping()) === 'PONG';
+  } catch {
+    return false;
+  }
+}
 redis.on('error', (err) => logger.error({ err: err.message }, 'redis error'));
 redis.on('connect', () => logger.info('redis connected'));
 

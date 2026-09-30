@@ -44,7 +44,15 @@ export function resetRefreshFlight(): void {
  * Access tokens stay in memory (authSlice) — never localStorage.
  */
 export function baseQueryWithReauth(baseUrl: string): BaseQueryFn<Args, unknown, FetchBaseQueryError> {
-  const rawBase = fetchBaseQuery({ baseUrl: `${ORIGIN}${baseUrl}`, credentials: 'include' });
+  const rawBase = fetchBaseQuery({
+    baseUrl: `${ORIGIN}${baseUrl}`,
+    credentials: 'include',
+    prepareHeaders: (headers, { getState }) => {
+      const accessToken = (getState() as { auth?: { accessToken?: string | null } }).auth?.accessToken;
+      if (accessToken) headers.set('authorization', `Bearer ${accessToken}`);
+      return headers;
+    },
+  });
   return async (args, api, extraOptions) => {
     const url = typeof args === 'string' ? args : args.url;
     const isAuthCall = url.startsWith('/auth/');

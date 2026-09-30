@@ -1,4 +1,4 @@
-import config from '../config.js';
+import config from './config.js';
 
 /** crm health includes JWKS reachability (auth dependency). */
 export async function getJwksHealthy() {

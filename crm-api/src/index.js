@@ -1,5 +1,5 @@
 import http from 'node:http';
-import config from '../config.js';
+import config from './config.js';
 import { logger } from './logger.js';
 import { sequelize } from './db.js';
 import { redis } from './redis.js';

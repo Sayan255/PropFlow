@@ -14,8 +14,10 @@ export const DEFAULT_LOCALITIES = [
 
 /** Idempotent default master data for a tenant. */
 export async function seedDefaultMasterData(tenantIds = null) {
-  const { Tenant } = await import('../models.js');
-  const tenants = tenantIds ?? (await Tenant.findAll()).map((t) => t.id);
+  const tenants = tenantIds ?? [
+    '11111111-1111-4111-8111-111111111111',
+    '22222222-2222-4222-8222-222222222222',
+  ];
   for (const tenantId of tenants) {
     const existing = await MasterDataItem.count({ where: { tenantId } });
     if (existing > 0) continue;

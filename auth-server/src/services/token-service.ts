@@ -32,7 +32,7 @@ export function setRefreshCookie(res: Response, token: string): void {
     httpOnly: true,
     secure: config.cookies.secure,
     sameSite: config.cookies.sameSite,
-    path: '/auth',
+    path: '/auth-api/auth',
     maxAge: config.refreshTokenTtlSeconds * 1000,
   });
 }
@@ -42,7 +42,7 @@ export function clearRefreshCookie(res: Response): void {
     httpOnly: true,
     secure: config.cookies.secure,
     sameSite: config.cookies.sameSite,
-    path: '/auth',
+    path: '/auth-api/auth',
   });
 }
 
