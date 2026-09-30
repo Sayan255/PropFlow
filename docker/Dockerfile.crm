@@ -1,0 +1,24 @@
+# PropFlow — crm-api (Node 20 alpine, non-root)
+FROM node:20-alpine
+
+ENV NODE_ENV=production
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+COPY packages/shared/package.json packages/shared/
+COPY crm-api/package.json crm-api/
+RUN npm ci --omit=dev --no-audit --no-fund
+
+COPY packages/shared/ packages/shared/
+COPY crm-api/ crm-api/
+COPY docker/entrypoint-crm.sh /usr/local/bin/entrypoint-crm.sh
+RUN chmod +x /usr/local/bin/entrypoint-crm.sh && chown -R node:node /app
+
+USER node
+WORKDIR /app/crm-api
+
+EXPOSE 4002
+HEALTHCHECK --interval=15s --timeout=5s --start-period=40s --retries=5 \
+  CMD node -e "fetch('http://127.0.0.1:4002/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+
+ENTRYPOINT ["/usr/local/bin/entrypoint-crm.sh"]
