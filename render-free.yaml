@@ -1,0 +1,159 @@
+# PropFlow on Render — FREE tier, no credit card
+#
+# Same architecture as render.yaml (edge nginx serves SPA + proxies /auth-api
+# and /crm-api, so the browser uses ONE origin — no VITE_API_ORIGIN needed),
+# but MySQL and Redis move to free external providers:
+#
+#   MySQL  → TiDB Cloud Serverless (free, MySQL wire-compatible, TLS, no card)
+#   Redis  → Render Key Value `free` plan (25MB, one per workspace, no card)
+#   auth/crm/edge → Render `free` web/private services
+#
+# Tradeoffs vs render.yaml (paid): free services SLEEP after ~15 min idle
+# (first request wakes them in ~30–60s), WebSockets/chat are unreliable right
+# after a wake, and crons only fire while awake. Fine for a hiring demo.
+#
+# TiDB prep (before deploying): one TiDB Serverless cluster; in its SQL console:
+#   CREATE DATABASE IF NOT EXISTS auth_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+#   CREATE DATABASE IF NOT EXISTS crm_db  CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+# Then note host (<cluster>.tidbcloud.com, port 4000), username (<user>.<suffix>.root)
+# and the app password. Set TLS via MYSQL_SSL=true (handled below).
+
+previews:
+  generation: off
+
+services:
+  # ── Redis-compatible cache (Render Key Value, free 25MB) ──────────────────
+  - type: keyvalue
+    name: propflow-free-redis
+    plan: free
+    ipAllowList: []            # private-network access from auth/crm only
+    maxmemoryPolicy: noeviction
+    persistenceMode: none      # free plan; refresh tokens re-seed on login
+
+  # ── auth-server (Render free) ─────────────────────────────────────────────
+  - type: pserv
+    name: propflow-free-auth
+    runtime: docker
+    dockerfilePath: docker/Dockerfile.auth
+    dockerContext: .
+    plan: free
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: info
+      # ── TiDB (external MySQL) ──────────────────────────────────────────────
+      - key: MYSQL_HOST
+        sync: false            # e.g. abc123def.cluster-abcxyz.ap-southeast-1.tidbcloud.com
+      - key: MYSQL_PORT
+        value: "4000"
+      - key: MYSQL_USER
+        sync: false            # e.g. 4AbCdEfGh.root
+      - key: MYSQL_PASSWORD
+        sync: false
+      - key: MYSQL_AUTH_DATABASE
+        value: auth_db
+      - key: MYSQL_SSL
+        value: "true"          # TiDB terminates TLS
+      # ── Redis (Render free Key Value) ─────────────────────────────────────
+      - key: REDIS_URL
+        fromService:
+          name: propflow-free-redis
+          type: keyvalue
+          property: connectionString
+      - key: REDIS_TLS
+        value: "false"         # private-network Redis; no TLS in front
+      # ── HTTP ───────────────────────────────────────────────────────────────
+      - key: AUTH_PORT
+        value: "4001"
+      - key: JWT_ACCESS_TTL
+        value: 60s
+      - key: INVITE_TTL_HOURS
+        value: "24"
+      - key: COOKIE_SECURE
+        value: "true"          # edge terminates TLS
+      - key: COOKIE_SAME_SITE
+        value: "none"
+      - key: CORS_ORIGIN
+        sync: false            # filled after first deploy: https://propflow-free-edge-xxxx.onrender.com
+      - key: FRONTEND_URL
+        sync: false
+      - key: SEED_PASSWORD
+        sync: false
+      - key: JWT_PRIVATE_KEY
+        sync: false            # flattened PEM (docs/DEPLOY-FREE.md step 2)
+      - key: JWT_PUBLIC_KEY
+        sync: false
+
+  # ── crm-api (Render free) ─────────────────────────────────────────────────
+  - type: pserv
+    name: propflow-free-crm
+    runtime: docker
+    dockerfilePath: docker/Dockerfile.crm
+    dockerContext: .
+    plan: free
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: info
+      # ── TiDB ───────────────────────────────────────────────────────────────
+      - key: MYSQL_HOST
+        sync: false
+      - key: MYSQL_PORT
+        value: "4000"
+      - key: MYSQL_USER
+        sync: false
+      - key: MYSQL_PASSWORD
+        sync: false
+      - key: MYSQL_CRM_DATABASE
+        value: crm_db
+      - key: MYSQL_SSL
+        value: "true"
+      # ── Redis ──────────────────────────────────────────────────────────────
+      - key: REDIS_URL
+        fromService:
+          name: propflow-free-redis
+          type: keyvalue
+          property: connectionString
+      - key: REDIS_TLS
+        value: "false"
+      # ── HTTP + auth dependency ─────────────────────────────────────────────
+      - key: CRM_PORT
+        value: "4002"
+      - key: AUTH_JWKS_URL
+        value: http://propflow-free-auth:4001/.well-known/jwks.json
+      - key: CORS_ORIGIN
+        sync: false
+      - key: EXPORT_MAX_ROWS
+        value: "5000"
+      - key: ENABLE_CRON
+        value: "true"          # harmless if asleep; single replica owns the lock
+      - key: SEED_PROPERTIES_PER_TENANT
+        value: "200"           # keep first boot fast on free compute + TiDB
+
+  # ── The only public entrypoint: edge nginx (SPA + API proxying) ───────────
+  - type: web
+    name: propflow-free-edge
+    runtime: docker
+    dockerfilePath: docker/Dockerfile.edge
+    dockerContext: .
+    plan: free
+    healthCheckPath: /healthz
+    envVars:
+      - key: AUTH_UPSTREAM
+        value: propflow-free-auth:4001
+      - key: CRM_UPSTREAM
+        value: propflow-free-crm:4002
+      - key: WEB_UPSTREAM
+        value: propflow-free-web:80
+      - key: LOGIN_RATE_LIMIT
+        value: 30r/m
+
+  # ── SPA (private; edge serves it) ─────────────────────────────────────────
+  - type: pserv
+    name: propflow-free-web
+    runtime: docker
+    dockerfilePath: docker/Dockerfile.web
+    dockerContext: .
+    plan: free

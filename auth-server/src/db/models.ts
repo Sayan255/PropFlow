@@ -9,6 +9,7 @@ export const sequelize = new Sequelize({
   password: config.mysql.password,
   database: config.mysql.database,
   dialect: 'mysql' as Dialect,
+  ...(config.mysql.ssl ? { dialectOptions: { ssl: config.mysql.ssl } } : {}),
   logging: false,
   define: { underscored: true },
   pool: { max: 10, min: 0, idle: 10_000, acquire: 30_000 },

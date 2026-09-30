@@ -5,6 +5,7 @@ import { logger } from './logger.ts';
 export const redis = new Redis(config.redisUrl, {
   maxRetriesPerRequest: null,
   lazyConnect: false,
+  ...(config.redisTls ? { tls: { rejectUnauthorized: false } } : {}),
 });
 
 redis.on('error', (err: Error) => logger.error({ err: err.message }, 'redis error'));

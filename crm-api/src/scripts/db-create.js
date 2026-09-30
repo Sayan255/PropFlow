@@ -7,6 +7,7 @@ export async function createDatabase() {
     port: config.mysql.port,
     user: config.mysql.user,
     password: config.mysql.password,
+    ...(config.mysql.ssl ? { ssl: config.mysql.ssl } : {}),
   });
   try {
     await conn.query(

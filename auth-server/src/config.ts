@@ -57,8 +57,11 @@ const config = {
     user: req('MYSQL_USER', 'propflow'),
     password: process.env.MYSQL_PASSWORD ?? 'propflow-dev-password',
     database: req('MYSQL_AUTH_DATABASE', 'auth_db'),
+    // Managed providers (TiDB/Aiven/PlanetScale-style) terminate TLS — set MYSQL_SSL=true.
+    ssl: process.env.MYSQL_SSL === 'true' ? { minVersion: 'TLSv1.2', rejectUnauthorized: false } : undefined,
   },
   redisUrl: process.env.REDIS_URL ?? 'redis://127.0.0.1:6379',
+  redisTls: process.env.REDIS_TLS === 'true',
 
   jwt: {
     accessTtl: process.env.JWT_ACCESS_TTL ?? '60s',

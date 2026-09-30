@@ -9,6 +9,7 @@ const authSequelize = new Sequelize({
   password: config.mysql.password,
   database: process.env.MYSQL_AUTH_DATABASE ?? 'auth_db',
   dialect: 'mysql',
+  ...(config.mysql.ssl ? { dialectOptions: { ssl: config.mysql.ssl } } : {}),
   logging: false,
   pool: { max: 5, min: 0, idle: 10_000 },
 });
