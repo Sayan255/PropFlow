@@ -10,7 +10,7 @@ import { STATUS_VALUES, formatINR, pricePerSqft } from '@propflow/shared';
 import { useAppSelector, useAppDispatch } from '../app/hooks';
 import { useDetailQuery, useUpdateMutation } from '../app/api/propertiesApi';
 import { useVisitCreateMutation } from '../app/api/miscApis';
-import { doRefresh } from '../app/baseQueryWithReauth';
+import { API_ORIGIN, doRefresh } from '../app/baseQueryWithReauth';
 import { showSnack } from '../app/slices/uiSlice';
 import { apiErrorCode, apiErrorMessage, apiErrorDetails, apiErrorStatus } from '../app/apiError';
 
@@ -43,7 +43,7 @@ export default function PropertyDetailPage() {
 
   useEffect(() => {
     if (!accessToken || !id) return;
-    const socket = io({
+    const socket = io(API_ORIGIN || undefined, {
       path: '/crm-api/socket.io',
       auth: { token: accessToken },
       // crm-api deliberately disables polling; start with its supported transport.

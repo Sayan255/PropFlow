@@ -4,7 +4,7 @@ import SendIcon from '@mui/icons-material/Send';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { io, type Socket } from 'socket.io-client';
 import { useAppSelector } from '../app/hooks';
-import { doRefresh } from '../app/baseQueryWithReauth';
+import { API_ORIGIN, doRefresh } from '../app/baseQueryWithReauth';
 
 interface Msg {
   id?: string;
@@ -29,7 +29,7 @@ export default function ChatPanel({ propertyId }: { propertyId: string }) {
 
   useEffect(() => {
     if (!accessToken) return;
-    const socket = io({
+    const socket = io(API_ORIGIN || undefined, {
       path: '/crm-api/socket.io',
       auth: { token: accessToken },
       // crm-api deliberately disables polling; start with its supported transport.

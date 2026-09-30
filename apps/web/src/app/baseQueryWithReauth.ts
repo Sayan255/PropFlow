@@ -7,10 +7,12 @@ export const CRM_BASE = '/crm-api';
 
 type Args = string | FetchArgs;
 
-/** Same-origin base: '' in the browser; absolute in Node/tests so fetch() resolves. */
-const ORIGIN = typeof window !== 'undefined' && (window as { location?: { origin?: string } }).location?.origin
-  ? (window as { location: { origin: string } }).location.origin
-  : '';
+/** Set VITE_API_ORIGIN to the backend edge URL for split frontend/backend hosting. */
+export const API_ORIGIN = (import.meta.env.VITE_API_ORIGIN || (
+  typeof window !== 'undefined' && (window as { location?: { origin?: string } }).location?.origin
+    ? (window as { location: { origin: string } }).location.origin
+    : ''
+)).replace(/\/$/, '');
 
 let refreshInFlight: Promise<boolean> | null = null;
 
@@ -19,7 +21,7 @@ export function doRefresh(): Promise<boolean> {
   if (refreshInFlight) return refreshInFlight;
   refreshInFlight = (async () => {
     try {
-      const res = await fetch(`${ORIGIN}${AUTH_BASE}/auth/refresh`, { method: 'POST', credentials: 'include' });
+      const res = await fetch(`${API_ORIGIN}${AUTH_BASE}/auth/refresh`, { method: 'POST', credentials: 'include' });
       if (!res.ok) return false;
       const data = (await res.json()) as { accessToken: string; user?: unknown };
       window.dispatchEvent(new CustomEvent('pf:token', { detail: data }));
@@ -45,7 +47,7 @@ export function resetRefreshFlight(): void {
  */
 export function baseQueryWithReauth(baseUrl: string): BaseQueryFn<Args, unknown, FetchBaseQueryError> {
   const rawBase = fetchBaseQuery({
-    baseUrl: `${ORIGIN}${baseUrl}`,
+    baseUrl: `${API_ORIGIN}${baseUrl}`,
     credentials: 'include',
     prepareHeaders: (headers, { getState }) => {
       const accessToken = (getState() as { auth?: { accessToken?: string | null } }).auth?.accessToken;
@@ -85,7 +87,7 @@ export interface AuthResponse {
 
 /** Direct fetch helper for auth endpoints (login/refresh cookie flow). */
 export async function authFetch(path: string, body?: unknown, method = 'POST'): Promise<{ status: number; data: AuthResponse }> {
-  const res = await fetch(`${ORIGIN}${AUTH_BASE}${path}`, {
+  const res = await fetch(`${API_ORIGIN}${AUTH_BASE}${path}`, {
     method,
     credentials: 'include',
     headers: body ? { 'content-type': 'application/json' } : undefined,
