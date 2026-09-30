@@ -1,0 +1,48 @@
+{
+  "name": "crm-api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "node --watch src/index.js",
+    "start": "node src/index.js",
+    "typecheck": "echo 'crm-api is JavaScript; typecheck skipped'",
+    "lint": "eslint \"src/**/*.js\" \"test/**/*.js\"",
+    "db:create": "node src/scripts/db-create.js",
+    "db:migrate": "node src/scripts/migrate.js",
+    "seed": "node src/scripts/seed.js",
+    "seed:demo": "node src/scripts/seed.js --with-demo",
+    "test": "npm run test:unit",
+    "test:unit": "node --test \"src/**/*.unit.test.js\"",
+    "test:integration": "node --test \"test/*.it.test.js\""
+  },
+  "dependencies": {
+    "@propflow/shared": "1.0.0",
+    "@socket.io/redis-adapter": "^8.2.1",
+    "async": "^3.2.5",
+    "compression": "^1.7.4",
+    "cookie": "^0.6.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "exceljs": "^4.4.0",
+    "express": "^4.19.2",
+    "helmet": "^7.1.0",
+    "ioredis": "^5.4.1",
+    "jose": "^5.6.3",
+    "mysql2": "^3.10.0",
+    "node-cron": "^3.0.3",
+    "pino": "^9.2.0",
+    "pino-http": "^10.2.0",
+    "sequelize": "^6.37.3",
+    "socket.io": "^4.7.5",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "@types/express": "^4.17.21",
+    "eslint": "^9.9.0",
+    "globals": "^14.0.0",
+    "pino-pretty": "^11.2.1"
+  }
+}
