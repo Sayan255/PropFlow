@@ -42,7 +42,16 @@ async function requireAuthUser(req: Request): Promise<AuthUser> {
   const { jwtVerify, createRemoteJWKSet } = await import('jose');
   const jwksUrl = process.env.AUTH_JWKS_URL ?? `http://127.0.0.1:${config.port}/.well-known/jwks.json`;
   const jwks = createRemoteJWKSet(new URL(jwksUrl));
-  const { payload } = await jwtVerify(token, jwks, { issuer: 'propflow-auth', audience: 'propflow-api' });
+  let payload: Record<string, unknown>;
+  try {
+    ({ payload } = await jwtVerify(token, jwks, { issuer: 'propflow-auth', audience: 'propflow-api' }));
+  } catch (err) {
+    const code = err && typeof err === 'object' && 'code' in err ? err.code : undefined;
+    if (typeof code === 'string' && (code.startsWith('ERR_JWT_') || code.startsWith('ERR_JWS_') || code === 'ERR_JWKS_NO_MATCHING_KEY')) {
+      throw unauthorized('Access token is expired or invalid');
+    }
+    throw err;
+  }
   return payload as unknown as AuthUser;
 }
 

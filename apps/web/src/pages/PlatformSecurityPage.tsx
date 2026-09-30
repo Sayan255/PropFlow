@@ -1,11 +1,12 @@
-import { Alert, Box, Button, Card, CardContent, Paper, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography } from '@mui/material';
+import { Alert, Box, Button, Card, CardContent, Paper, Snackbar, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography } from '@mui/material';
 import KeyIcon from '@mui/icons-material/Key';
 import { useSecurityEventsQuery, useRotateKeysMutation } from '../app/api/authApi';
-import { useAppDispatch } from '../app/hooks';
-import { showSnack } from '../app/slices/uiSlice';
+import { useAppDispatch, useAppSelector } from '../app/hooks';
+import { clearSnack, showSnack } from '../app/slices/uiSlice';
 
 export default function PlatformSecurityPage() {
   const dispatch = useAppDispatch();
+  const snack = useAppSelector((state) => state.ui.snack);
   const { data, isLoading, refetch } = useSecurityEventsQuery();
   const [rotate, { isLoading: rotating }] = useRotateKeysMutation();
 
@@ -69,7 +70,11 @@ export default function PlatformSecurityPage() {
                   <TableCell>{new Date(e.at).toLocaleString('en-IN')}</TableCell>
                   <TableCell>{e.type}</TableCell>
                   <TableCell>
-                    {e.user?.name ?? e.user?.email ?? (e.userId ? `Unknown account (${e.userId})` : '—')}
+                    {e.user?.name ?? e.user?.email ?? (e.userId
+                      ? `Unknown account (${e.userId})`
+                      : e.type === 'LOGOUT'
+                        ? 'Not recorded (older event)'
+                        : '—')}
                     {e.user?.name && e.user.email ? ` · ${e.user.email}` : ''}
                   </TableCell>
                   <TableCell>{e.ip ?? '—'}</TableCell>
@@ -86,6 +91,12 @@ export default function PlatformSecurityPage() {
           </TableBody>
         </Table>
       </TableContainer>
+      <Snackbar
+        open={!!snack}
+        message={snack?.message ?? ''}
+        autoHideDuration={4000}
+        onClose={() => dispatch(clearSnack())}
+      />
       <Box pb={4} />
     </Stack>
   );

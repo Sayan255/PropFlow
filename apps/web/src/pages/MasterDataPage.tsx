@@ -9,7 +9,7 @@ import ArrowDownIcon from '@mui/icons-material/ArrowDownward';
 import { MASTER_KINDS, type MasterKind } from '@propflow/shared';
 import { useMasterDataQuery, useMasterUpdateMutation, useMasterRemoveMutation } from '../app/api/miscApis';
 import { useAppDispatch, useAppSelector } from '../app/hooks';
-import { apiErrorStatus } from '../app/apiError';
+import { apiErrorMessage, apiErrorStatus } from '../app/apiError';
 import { clearSnack, showSnack } from '../app/slices/uiSlice';
 
 export default function MasterDataPage() {

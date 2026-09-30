@@ -31,6 +31,10 @@ export async function ensureSigningKey(): Promise<void> {
     if (row && privatePem) {
       const { privateKey, publicKey } = await importKeyPair(privatePem, row.publicKeyPem);
       currentKey = { kid: persistedKid, privateKey, publicKey };
+      await sequelize.transaction(async (t) => {
+        await SigningKey.update({ active: false }, { where: {}, transaction: t });
+        await row.update({ active: true }, { transaction: t });
+      });
       await refreshJwksCache();
       return;
     }
@@ -41,12 +45,13 @@ export async function ensureSigningKey(): Promise<void> {
   const { privateKey, publicKey } = await importKeyPair(config.jwt.privateKey, config.jwt.publicKey);
   currentKey = { kid: config.jwt.currentKeyId, privateKey, publicKey };
 
-  await sequelize.transaction(async (t) =>
-    SigningKey.upsert(
+  await sequelize.transaction(async (t) => {
+    await SigningKey.update({ active: false }, { where: {}, transaction: t });
+    await SigningKey.upsert(
       { kid: currentKey!.kid, publicKeyPem: config.jwt.publicKey!, active: true },
       { transaction: t },
-    ),
-  );
+    );
+  });
   await redis.set(`${PRIVATE_KEY_PREFIX}${currentKey.kid}`, config.jwt.privateKey);
   await redis.set(ACTIVE_KID_KEY, currentKey.kid);
   await refreshJwksCache();
@@ -62,7 +67,9 @@ export function generateKeyPairPem(): { privateKeyPem: string; publicKeyPem: str
 }
 
 async function buildJwks(): Promise<{ keys: Record<string, unknown>[] }> {
-  const rows = await SigningKey.findAll({ order: [['createdAt', 'DESC']], limit: 5 });
+  // Keep previous public keys published so access tokens minted just before
+  // rotation remain verifiable until they expire.
+  const rows = await SigningKey.findAll({ order: [['createdAt', 'DESC']] });
   const keys = await Promise.all(
     rows.map(async (row) => {
       const jwk = await exportJWK(await importSPKI(row.publicKeyPem, 'RS256'));
