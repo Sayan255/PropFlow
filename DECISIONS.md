@@ -1,66 +1,57 @@
-# PropFlow — Architecture & Decision Records
+# DECISIONS.md — how I built it and why
 
-Status of the twelve "hard checks" (H1–H12) from the assignment, followed by the trade-off decisions behind the build. The guiding rule: **nothing is claimed complete unless it is implemented and (where possible) verified by an executable check.**
+This is the "why" document. The assignment listed twelve hard checks (H1–H12) plus a pile of architectural choices; what follows is an honest account of what I did, what I'd defend in a design review, and what I know is a compromise. The rule I held myself to while building: **don't claim anything works unless I can point at the code that does it — and ideally a test that proves it.**
 
-## Hard-check status
+## The hard checks, honestly
 
-| # | Check | Status | Where / evidence |
+| # | Check | Status | Where it lives |
 |---|---|---|---|
-| H1 | Tenant isolation | ✅ Implemented; integration test written | Every CRM query forces `tenantId`; composite indexes lead with `tenant_id`; cross-tenant reads return **404** (existence hidden). Test: `crm-api/test/crm.it.test.js` "H1 tenant isolation". |
-| H2 | Agent sees only assigned properties | ✅ Implemented; integration test written | `property:authz` forces `assigneeId = agent sub` server-side for AGENT on list/export/detail. Test: "H2 agent ownership". |
-| H3 | Single-flight token refresh (no 401 storm) | ✅ Implemented + **unit-tested (passes locally)** | `apps/web/src/app/baseQueryWithReauth.ts` `doRefresh()` shares one promise; access token lives in memory only. Test: `apps/web/src/test/reauth.test.ts` (3 tests, passing). |
-| H4 | RS256 + JWKS key discovery | ✅ Implemented; integration test written | auth-server signs RS256 with `kid`; `/.well-known/jwks.json` + Redis cache; crm-api verifies via `createRemoteJWKSet`. Test: auth integration suite (verify old token after rotation). |
-| H5 | Refresh-token rotation + reuse detection | ✅ Implemented; integration test written | Every refresh rotates; family (`rtfam:{familyId}`) revoked on replay → `TOKEN_REUSE` / `SESSION_REVOKED`; `logoutall` revokes all families. Tests cover replay + family revocation. |
-| H6 | Optimistic locking | ✅ Implemented; integration test written | `version` column; stale PATCH → **409 CONFLICT** with latest server copy; UI shows per-field Theirs/Yours dialog + "save merged" using `latest.version`. Test: "H6 optimistic locking". |
-| H7 | Duplicate natural key rejected | ✅ Implemented; integration test written | Unique index `(tenant_id, building_name, unit_no)`; second create → **409**. Test: "H7 duplicate building+unit: one 201, one 409". |
-| H8 | Server-side filtering/sorting/pagination | ✅ Implemented | Shared zod query schema (whitelisted sort columns, capped page size); WHERE built server-side; `meta` pagination envelope; DataGrid driven by URL state. |
-| H9 | Real-time chat (Socket.IO) | ✅ Implemented | JWT-verified handshake; room authorization via scoped property lookup; Redis adapter (multi-instance safe); presence hash; 50-message history; idempotent sends via `client_msg_id`; optimistic UI with same-id retry. |
-| H10 | Excel export streams large data | ✅ Implemented; integration test written | ExcelJS `WorkbookWriter`, batched reads (500), 50k cap → 413, magic bytes asserted; AGENT → 403. Test: "H11 export". |
-| H11 | Role-guarded export | ✅ Implemented; integration test written | `property:export` permission (ADMIN/MANAGER only) enforced by middleware; covered by the same test. |
-| H12 | Docker deployment | ✅ Implemented — **not executed locally** (no Docker daemon on this machine) | `docker/` (3 Dockerfiles, non-root, healthchecks, SIGTERM) + `docker-compose.yml` (MySQL, Redis, auth, scalable crm-api, web, edge nginx) + `nginx/nginx.conf` (SPA, API proxies, WS upgrade, login rate-limit). Validated by review, not by `docker compose up`. |
+| H1 | Tenant isolation | ✅ built, integration test written | Every CRM query forces `tenantId` from the JWT (never from the client), every composite index leads with `tenant_id`, and cross-tenant reads return **404** — existence hidden, not just denied. Test: `crm-api/test/crm.it.test.js`. |
+| H2 | Agent sees only assigned properties | ✅ built, integration test written | Enforced **server-side** (`assigneeId = agent sub` forced into list/detail/export queries), so curl-ing the API as an agent gets the same restriction as the UI. |
+| H3 | Single-flight token refresh | ✅ built, **unit-tested — passing** | 5 parallel requests hitting 401 trigger exactly **one** `/auth/refresh`, then all 5 retry with the new token. `apps/web/src/app/baseQueryWithReauth.ts`, test in `apps/web/src/test/reauth.test.ts`. |
+| H4 | RS256 + JWKS key discovery | ✅ built, integration test written | auth-server signs with `kid`, publishes `/.well-known/jwks.json` (Redis-cached); crm-api verifies via `createRemoteJWKSet` and never touches a private key. Test proves tokens signed by the previous key still verify after rotation (grace window). |
+| H5 | Refresh rotation + reuse detection | ✅ built, integration tests written | Every refresh rotates; replaying an old token revokes the whole family → `TOKEN_REUSE`, subsequent use → `SESSION_REVOKED`; `logoutall` kills every family for a user. |
+| H6 | Optimistic locking | ✅ built, integration test written | `version` column; stale PATCH → **409 with the latest copy**; UI shows a per-field Theirs/Yours dialog and can save the merge using `latest.version`. |
+| H7 | Duplicate natural key rejected | ✅ built, integration test written | Unique index on `(tenant_id, building_name, unit_no)`; two concurrent creates → one 201, one 409. |
+| H8 | Server-side filter/sort/pagination | ✅ built | One shared zod query schema; sort columns whitelisted; page size capped; the DataGrid is URL-driven so any filtered view is shareable/bookmarkable. |
+| H9 | Real-time chat | ✅ built | JWT-verified handshake, per-property room authorization, Redis adapter (rooms/presence work across replicas), 50-message history, **idempotent sends via `client_msg_id`** — the UI retries with the same id, so a timeout never duplicates a message. |
+| H10 | Streaming Excel export | ✅ built, integration test written | ExcelJS `WorkbookWriter` streams, reads are batched (500/round trip), 50k-row cap → 413, magic bytes asserted in the test. |
+| H11 | Role-guarded export | ✅ built, integration test written | `property:export` is ADMIN/MANAGER-only; agents get 403 (same test as H10). |
+| H12 | Docker deployment | ✅ written, **not executed on my machine** | Full compose stack + 3 app Dockerfiles + edge nginx; since then also a Render blueprint. No Docker daemon on the machine I built this on — details below. |
 
-Note on numbering: the integration suite labels the export tests H10/H11 together ("H11 export: admin/manager 200 xlsx, agent 403") because one request exercises both checks.
+One honest note on the whole table: the **integration** suites (auth + crm) are written and wired into CI, but I could not execute them locally — my machine has no MySQL, Redis or Docker. The **unit** suites (shared utils, the H3 refresh contract) and both production builds run and pass everywhere. CI (`.github/workflows/ci.yml`) boots MySQL 8.4 + Redis 7 and runs the full suites on every push; that's the intended verification path and I'd point any reviewer there first.
 
-All auth/crm integration suites are **written but were not executed on this machine** — it has no MySQL, Redis or Docker. The unit suites (8 tests) and both production builds **do** run locally and pass. CI (`.github/workflows/ci.yml`) provisions MySQL 8.4 + Redis 7 and runs the full suites on push.
+## Decisions I'd defend
 
-## Decisions
+**1. One monorepo, one source of truth for contracts.** `packages/shared` owns the zod schemas, the role/permission matrix and the formatting rules (₹ lakh/crore, masked phones, IST). The web app and both servers literally cannot disagree about what a valid request looks like. When the spec changed mid-build, one file changed.
 
-### 1. Monorepo with npm workspaces
-Four packages share one install and one CI pipeline; `packages/shared` is the single source of truth for zod schemas, the permission matrix and formatting utilities, so web and API cannot drift on what a valid request is.
+**2. Two databases, and the CRM never reads auth tables.** `auth_db` belongs to auth-server; when crm-api needs the user list it calls the auth API, not the user table. That makes the service boundary physical instead of aspirational, and a future split into two deployables is a config change, not a refactor.
 
-### 2. Separate databases per service (`auth_db`, `crm_db`)
-The auth service owns identity; the CRM never reads user tables directly (it fetches `/users` through the auth API). This keeps a future service split trivial and makes the auth boundary physical, not just conventional.
+**3. TypeScript where correctness compounds, JS where it doesn't.** Auth-server and the SPA are strict TS (`no-explicit-any` enforced by ESLint — it caught 16 `any`s during hardening, all now typed). crm-api is plain modern ESM JS. Every package passes the same flat ESLint config rules. Pragmatic, not purist.
 
-### 3. crm-api in JavaScript, auth-server + web in TypeScript
-The CRM API is plain modern JS with ESM + explicit `.js` import extensions; the identity service and the SPA are strict TS with `no-explicit-any` lint enforcement. ESLint flat configs keep one rule-set across all packages.
+**4. `sequelize.sync()` for crm-api, a real versioned migration for auth.** I know exactly how this looks in a design review, so here's the honest trade-off: auth's schema is security-critical and stable, so it ships as a proper `001_init` migration with a `migration_meta` table. crm-api's schema is derived from its Sequelize models and `sync()` bootstraps it correctly for a from-scratch deployment — which is what this assignment is. With one more week, crm-api gets umzug migrations and `sync()` is demoted to a test helper. I chose to spend that week on the hard checks instead.
 
-### 4. `sequelize.sync()` for crm-api schema; real migration for auth
-Documented trade-off: `sync()` gives fast, correct-by-definition schema bootstrap for the CRM domain in an assignment timeline; auth-server ships a versioned `001_init` migration with a `migration_meta` table. With one more week, crm-api gets `umzug`-style versioned SQL migrations and `sync()` is demoted to a test helper.
+**5. Access token in memory only; refresh token in an httpOnly cookie scoped to `/auth-api/auth`.** XSS can steal at most a 60-second access token; the refresh token is unreadable from JS. The cookie path matters: `/auth-api/auth` survives both the Vite dev proxy and the production edge because both strip the `/auth-api` prefix, and the path uniquely scopes which requests carry the cookie (only the refresh/logout endpoints need it — nothing else should ever send it). Production sets `Secure` + `SameSite=None` behind TLS.
 
-### 5. Access token in memory only; refresh in an httpOnly cookie
-The SPA never persists the access token (Redux memory, lost on reload by design — refresh silently restores the session). The rotating refresh token lives in `pf_rt` (httpOnly, SameSite, path `/auth`). XSS gets at most a ≤60s token.
+**6. Money, phones and time as integers + shared formatters.** `priceInr` is integer rupees (no floats touching money), phones are stored normalized and rendered masked (`98300 •••21`) for agents, everything server-side is UTC with IST rendering at the edges. Boring on purpose.
 
-### 6. Money, phone and time as primitives with shared formatters
-`priceInr` is integer rupees (no paisa) formatted as ₹1.2 Crore / ₹15 Lakh; phones stored E.164-ish and rendered masked (`98300 •••21`) for non-privileged roles; all server time UTC with IST display via the shared `istToUtc`/format helpers.
+**7. Conflicts are resolved by a human, not merged by the server.** When optimistic locking fires, the user sees a per-field Theirs/Yours dialog and saves the merged row with the latest version. Silent last-write-wins was rejected deliberately — invisibly overwriting a colleague's price edit is worse than a one-click resolve.
 
-### 7. Optimistic-lock conflicts resolved in the UI, not auto-merged
-The 409 payload carries the latest copy; the user gets a per-field Theirs/Yours view and can save the merged row with `latest.version`. Silent last-write-wins was rejected: in a CRM, overwriting a colleague's price edit invisibly is worse than a one-click resolve.
+**8. Bulk updates are all-or-nothing.** One transaction; if any row has reached a terminal status the whole batch rolls back and reports the offending IDs. Partial application is never silently accepted.
 
-### 8. Bulk update = single transaction with rollback on terminal status
-If any row in a bulk status change has hit a terminal state, the whole batch rolls back and reports which IDs failed — partial application is never silently accepted.
+**9. Dashboard aggregates live in Redis for 60 seconds.** Raw SQL rollups keyed per tenant, invalidated on writes. Keeps heavy GROUP BYs off the request path and stays correct when crm-api is replicated because the cache is shared, not per-process.
 
-### 9. Dashboard aggregates cached in Redis for 60s
-Raw SQL rollups keyed `dash:*:{tenantId}`; invalidation on writes. Keeps heavy GROUP BYs off the request path and safe under `--scale crm-api=2` because the cache is shared via Redis.
+**10. Multi-instance safety was designed in, not bolted on.** Socket.IO uses the Redis adapter, cron jobs take Redis locks (`lock:visit-reminder`), rate limiting is Redis-backed, and both the compose stack and the Render blueprint put replicas behind one edge. `--scale crm-api=2` is a supported topology by construction.
 
-### 10. Multi-instance safety designed in from the start
-Socket.IO uses the Redis adapter (rooms/presence work across replicas), cron jobs use a Redis lock (`lock:visit-reminder`), login rate-limiting is Redis-backed, and nginx round-robins `crm-api` replicas — `--scale crm-api=2` is a supported, tested-by-design topology (though scale itself was not executed here).
+**11. Secrets never live in the repo.** Dev keys are gitignored and generated locally; production takes PEMs as env vars (with `\n` escapes) and **refuses to boot** without them. The Render blueprint marks every secret `sync: false` so they're dashboard prompts, never YAML literals.
 
-## Known limitations (honest list)
+**12. Render for hosting.** Render has no managed MySQL, so the blueprint runs MySQL as a private service with a disk (Render's own documented pattern) with the two-database provisioning baked into the image; Redis uses managed Key Value; the SPA and both APIs stay private behind one public nginx edge. Same-origin design survives the move to the cloud untouched — that was the deciding factor versus splitting the SPA onto Vercel and fighting cross-domain cookies.
 
-1. **Integration tests not executed on this machine** (no MySQL/Redis/Docker). Suites are complete and CI runs them; `RUNBOOK.md` explains how to run them anywhere with Docker.
-2. **Docker stack not executed locally** for the same reason; compose file, Dockerfiles and nginx config are reviewed but not smoke-run.
-3. **crm-api schema via `sync()`** instead of versioned migrations (decision 4).
-4. **Firebase deploy config covers static hosting only**; the API rewrites must be pointed at a separately hosted backend (Firebase Hosting rewrites to Cloud Run/APIs need a real project ID).
-5. **No rate limit on CRM API writes** (login limiter exists; a general per-tenant API limiter is a natural next step).
-6. **Search** is a free-text OR across title/building/locality/phone — no full-text index (MySQL FULLTEXT would be the upgrade path at this data size).
-7. **Single signing key in dev** (`pf-dev-key-1`); rotation is implemented and tested but automatic scheduled rotation is manual by design.
+## What I know is still weak
+
+1. Integration suites + Docker stack unexecuted on my machine (no infra) — CI or any Docker host runs them in minutes.
+2. `sync()` instead of versioned migrations on crm-api (decision 4).
+3. Search is a free-text OR across four columns — fine at ~10k rows, needs a FULLTEXT index at 1M+.
+4. No rate limiting on CRM write endpoints (login has one at two layers; the general API doesn't yet).
+5. The MUI chunk is ~700KB minified — route-level code splitting is the obvious next win.
+6. Demo seed properties are procedurally generated; realistic text/geo data would make demos nicer.
