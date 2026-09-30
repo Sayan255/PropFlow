@@ -1,0 +1,120 @@
+# PropFlow — full stack: MySQL, Redis, auth-server, crm-api (scalable), web, edge nginx.
+#
+#   docker compose up -d --build                 # everything
+#   docker compose up -d --scale crm-api=2       # 2 crm replicas behind nginx
+#   docker compose logs -f crm-api               # follow logs
+#
+# First `up` takes a few minutes: crm-api syncs its schema and seeds 10,482
+# properties + visits/notes/chats before listening.
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root-dev-password}
+      MYSQL_DATABASE: auth_db
+      MYSQL_USER: ${MYSQL_USER:-propflow}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-propflow-dev-password}
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-root-dev-password}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  auth:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.auth
+    environment:
+      NODE_ENV: production
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_USER: ${MYSQL_USER:-propflow}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-propflow-dev-password}
+      MYSQL_AUTH_DATABASE: auth_db
+      REDIS_URL: redis://redis:6379
+      AUTH_PORT: 4001
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-60s}
+      INVITE_TTL_HOURS: ${INVITE_TTL_HOURS:-24}
+      # Same-origin through nginx; the refresh cookie is scoped to path /auth.
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:8080}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8080}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      COOKIE_SAME_SITE: lax
+      SEED_PASSWORD: ${SEED_PASSWORD:-Password123!}
+      SEED_SUPERADMIN_EMAIL: ${SEED_SUPERADMIN_EMAIL:-superadmin@propflow.local}
+      SEED_TENANTS: ${SEED_TENANTS:-2}
+    volumes:
+      - auth-keys:/app/keys
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  crm-api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.crm
+    environment:
+      NODE_ENV: production
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_USER: ${MYSQL_USER:-propflow}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-propflow-dev-password}
+      MYSQL_CRM_DATABASE: crm_db
+      REDIS_URL: redis://redis:6379
+      CRM_PORT: 4002
+      AUTH_JWKS_URL: http://auth:4001/.well-known/jwks.json
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:8080}
+      ENABLE_CRON: ${ENABLE_CRON:-false}
+      SEED_PROPERTIES_PER_TENANT: ${SEED_PROPERTIES_PER_TENANT:-10482}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      auth:
+        condition: service_started
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.web
+    depends_on: []
+
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - auth
+      - crm-api
+      - web
+
+volumes:
+  mysql-data:
+  redis-data:
+  auth-keys:
