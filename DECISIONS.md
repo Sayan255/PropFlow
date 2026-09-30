@@ -5,7 +5,7 @@ This is the "why" document. The assignment listed twelve hard checks (H1–H12) 
 ## The hard checks, honestly
 
 | # | Check | Status | Where it lives |
-|---|---|---|---|
+
 | H1 | Tenant isolation | ✅ built, integration test written | Every CRM query forces `tenantId` from the JWT (never from the client), every composite index leads with `tenant_id`, and cross-tenant reads return **404** — existence hidden, not just denied. Test: `crm-api/test/crm.it.test.js`. |
 | H2 | Agent sees only assigned properties | ✅ built, integration test written | Enforced **server-side** (`assigneeId = agent sub` forced into list/detail/export queries), so curl-ing the API as an agent gets the same restriction as the UI. |
 | H3 | Single-flight token refresh | ✅ built, **unit-tested — passing** | 5 parallel requests hitting 401 trigger exactly **one** `/auth/refresh`, then all 5 retry with the new token. `apps/web/src/app/baseQueryWithReauth.ts`, test in `apps/web/src/test/reauth.test.ts`. |

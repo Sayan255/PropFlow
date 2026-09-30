@@ -7,7 +7,7 @@ The day-2 document: what to check when something looks wrong, how to reset thing
 **Local dev** (three terminals + local MySQL/Redis):
 
 | Service | Port | Start | Health |
-|---|---|---|---|
+
 | SPA (Vite) | 5173 | `npm run dev:web` | http://localhost:5173 |
 | auth-server | 4001 | `npm run dev:auth` | `curl localhost:4001/health` |
 | crm-api | 4002 | `npm run dev:crm` | `curl localhost:4002/health` |
