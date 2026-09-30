@@ -1,0 +1,30 @@
+{
+  "hosting": {
+    "public": "dist",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "rewrites": [
+      { "source": "/login", "destination": "/index.html" },
+      { "source": "/register", "destination": "/index.html" },
+      { "source": "/invite/accept", "destination": "/index.html" },
+      { "source": "/dashboard", "destination": "/index.html" },
+      { "source": "/properties", "destination": "/index.html" },
+      { "source": "/properties/**", "destination": "/index.html" },
+      { "source": "/my-properties", "destination": "/index.html" },
+      { "source": "/site-visits", "destination": "/index.html" },
+      { "source": "/admin/**", "destination": "/index.html" },
+      { "source": "/platform/**", "destination": "/index.html" },
+      { "source": "/403", "destination": "/index.html" },
+      { "source": "/404", "destination": "/index.html" }
+    ],
+    "headers": [
+      {
+        "source": "/assets/**",
+        "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
+      },
+      {
+        "source": "/index.html",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+      }
+    ]
+  }
+}
