@@ -26,6 +26,7 @@
     "db:migrate": "npm run db:migrate -w auth-server && npm run db:migrate -w crm-api",
     "db:seed": "npm run seed -w auth-server && npm run seed -w crm-api",
     "docker:up": "docker compose up -d --build",
-    "docker:down": "docker compose down"
+    "docker:down": "docker compose down",
+    "deploy:web": "npm run build -w apps/web && firebase deploy --only hosting"
   }
 }
