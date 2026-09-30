@@ -1,0 +1,31 @@
+{
+  "name": "propflow",
+  "version": "1.0.0",
+  "private": true,
+  "description": "PropFlow — Multi-Tenant Real Estate CRM (monorepo)",
+  "license": "MIT",
+  "workspaces": [
+    "packages/shared",
+    "auth-server",
+    "crm-api",
+    "apps/web"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "test:unit": "npm run test:unit --workspaces --if-present",
+    "test:integration": "npm run test:integration --workspaces --if-present",
+    "dev:auth": "npm run dev -w auth-server",
+    "dev:crm": "npm run dev -w crm-api",
+    "dev:web": "npm run dev -w apps/web",
+    "db:migrate": "npm run db:migrate -w auth-server && npm run db:migrate -w crm-api",
+    "db:seed": "npm run seed -w auth-server && npm run seed -w crm-api",
+    "docker:up": "docker compose up -d --build",
+    "docker:down": "docker compose down"
+  }
+}
