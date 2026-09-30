@@ -52,6 +52,10 @@ npm run dev:web     # Vite dev server on :5173
 
 Open **http://localhost:5173**. The Vite dev server proxies `/auth-api/*` and `/crm-api/*` to the backends, so the SPA talks to everything same-origin (that matters for the refresh cookie — see below).
 
+### Option 3: Render (cloud)
+
+There's a Render blueprint (`render.yaml`) that provisions the whole stack — MySQL private service, Redis, the three app services and a public nginx edge. The step-by-step, including the secrets you'll be prompted for and the cost breakdown, is in [docs/DEPLOY-RENDER.md](docs/DEPLOY-RENDER.md).
+
 ### Demo accounts
 (email id: admin@tenant-a.local
 password: Password123!)

@@ -12,5 +12,7 @@ echo "[entrypoint] ensuring database exists"
 npx tsx src/scripts/db-create.ts
 echo "[entrypoint] running migrations"
 npx tsx src/scripts/migrate.ts
+echo "[entrypoint] seeding demo accounts (idempotent)"
+npx tsx src/scripts/seed.ts
 
 exec npx tsx src/index.ts

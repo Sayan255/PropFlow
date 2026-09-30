@@ -1,0 +1,167 @@
+# PropFlow on Render — Infrastructure as Code
+#
+# Creates: MySQL (private service + disk) · Key Value (Redis) · auth, crm-api, web
+# (private) · one public nginx edge that serves the SPA and proxies /auth-api and
+# /crm-api — same topology as docker-compose, so no app changes are needed.
+#
+# Deploy: push this file to the repo root → Render Dashboard → New + → Blueprint
+# → pick this repo. You'll be prompted for the sync:false secrets once.
+#
+# Cost note: web/private services on the `free` plan SLEEP and their processes
+# stop when idle. PropFlow's chat (WebSockets) and visit reminders need an
+# always-on plan (starter, $7/mo per service). MySQL's disk also requires a
+# paid plan.
+
+previews:
+  generation: off
+
+services:
+  # ── MySQL 8 as a private service (Render has no managed MySQL) ────────────
+  # docker/Dockerfile.mysql bakes the first-boot provisioning script into the
+  # image; bitnami's entrypoint executes scripts in /docker-entrypoint-initdb.d/
+  # on first boot, creating auth_db + crm_db and granting the app user.
+  - type: pserv
+    name: propflow-mysql
+    runtime: docker
+    dockerfilePath: docker/Dockerfile.mysql
+    dockerContext: .
+    plan: 1c-2g            # paid plan required for the persistent disk
+    disk:
+      name: propflow-mysql-data
+      mountPath: /bitnami/mysql/data
+      sizeGB: 10
+    envVars:
+      - key: BITNAMI_DEBUG
+        value: "false"
+      - key: MYSQL_USER
+        value: propflow
+      - key: MYSQL_PASSWORD
+        sync: false        # prompted once at blueprint creation
+      - key: MYSQL_ROOT_PASSWORD
+        sync: false
+
+  # ── Redis-compatible cache for sessions, rate limits, sockets, caches ─────
+  - type: keyvalue
+    name: propflow-redis
+    plan: 256mb
+    ipAllowList: []        # private only; nothing from the internet
+    maxmemoryPolicy: noeviction   # refresh tokens/sessions must not be evicted
+    persistenceMode: journal-snapshot
+
+  # ── auth-server (private) ─────────────────────────────────────────────────
+  - type: pserv
+    name: propflow-auth
+    runtime: docker
+    dockerfilePath: docker/Dockerfile.auth
+    dockerContext: .
+    plan: 0.5c-512mb
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: info
+      - key: MYSQL_HOST
+        value: propflow-mysql   # Render private-service DNS name
+      - key: MYSQL_PORT
+        value: "3306"
+      - key: MYSQL_USER
+        value: propflow
+      - key: MYSQL_PASSWORD
+        sync: false
+      - key: MYSQL_AUTH_DATABASE
+        value: auth_db
+      - key: REDIS_URL
+        fromService:
+          name: propflow-redis
+          type: keyvalue
+          property: connectionString
+      - key: AUTH_PORT
+        value: "4001"
+      - key: JWT_ACCESS_TTL
+        value: 60s
+      - key: INVITE_TTL_HOURS
+        value: "24"
+      - key: COOKIE_SECURE
+        value: "true"       # edge terminates TLS
+      - key: COOKIE_SAME_SITE
+        value: "none"       # cookie is scoped to /auth-api/auth; path does the isolation
+      - key: CORS_ORIGIN
+        sync: false         # your Render URL, e.g. https://propflow-edge.onrender.com
+      - key: FRONTEND_URL
+        sync: false
+      - key: SEED_PASSWORD
+        sync: false
+      - key: JWT_PRIVATE_KEY
+        sync: false         # PEM with newlines escaped as \n (see docs/DEPLOY-RENDER.md)
+      - key: JWT_PUBLIC_KEY
+        sync: false
+
+  # ── crm-api (private) ─────────────────────────────────────────────────────
+  - type: pserv
+    name: propflow-crm
+    runtime: docker
+    dockerfilePath: docker/Dockerfile.crm
+    dockerContext: .
+    plan: 0.5c-512mb
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: info
+      - key: MYSQL_HOST
+        value: propflow-mysql   # Render private-service DNS name
+      - key: MYSQL_PORT
+        value: "3306"
+      - key: MYSQL_USER
+        value: propflow
+      - key: MYSQL_PASSWORD
+        sync: false
+      - key: MYSQL_CRM_DATABASE
+        value: crm_db
+      - key: REDIS_URL
+        fromService:
+          name: propflow-redis
+          type: keyvalue
+          property: connectionString
+      - key: CRM_PORT
+        value: "4002"
+      - key: AUTH_JWKS_URL
+        value: http://propflow-auth:4001/.well-known/jwks.json
+      - key: CORS_ORIGIN
+        sync: false
+      - key: EXPORT_MAX_ROWS
+        value: "50000"
+      - key: ENABLE_CRON
+        value: "true"       # single crm replica owns the scheduler
+      - key: SEED_PROPERTIES_PER_TENANT
+        value: "500"        # 10482 is the local-dev spec; keep Render's first boot fast
+
+  # ── SPA (private; the edge serves it) ─────────────────────────────────────
+  - type: pserv
+    name: propflow-web
+    runtime: docker
+    dockerfilePath: docker/Dockerfile.web
+    dockerContext: .
+    plan: 0.5c-512mb
+
+  # ── The only public entrypoint: edge nginx (SPA + API proxying) ───────────
+  - type: web
+    name: propflow-edge
+    runtime: docker
+    dockerfilePath: docker/Dockerfile.edge
+    dockerContext: .
+    plan: 0.5c-512mb
+    healthCheckPath: /healthz
+    maxShutdownDelaySeconds: 30
+    envVars:
+      # Deterministic private-DNS host:port — no reliance on Render's port detection.
+      - key: AUTH_UPSTREAM
+        value: propflow-auth:4001
+      - key: CRM_UPSTREAM
+        value: propflow-crm:4002
+      - key: WEB_UPSTREAM
+        value: propflow-web:80
+      - key: LOGIN_RATE_LIMIT
+        value: 30r/m

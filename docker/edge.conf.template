@@ -1,0 +1,75 @@
+# PropFlow edge — ${AUTH_UPSTREAM} / ${CRM_UPSTREAM} / ${WEB_UPSTREAM} are filled
+# in by nginx's envsubst template runner at container start.
+limit_req_zone $binary_remote_addr zone=login:10m rate=${LOGIN_RATE_LIMIT};
+limit_req_status 429;
+
+upstream auth_upstream { server ${AUTH_UPSTREAM}; }
+upstream crm_upstream  { server ${CRM_UPSTREAM}; }
+upstream web_upstream  { server ${WEB_UPSTREAM}; }
+
+server {
+    listen 80;
+    server_name _;
+
+    proxy_http_version 1.1;
+
+    # ── Health check (Render polls this) ────────────────────────────────────
+    location = /healthz {
+        access_log off;
+        default_type text/plain;
+        return 200 "edge ok\n";
+        # Note: this proves the edge is up; per-dependency status stays at
+        # /auth-api/health and /crm-api/health (proxied, not summed here).
+    }
+
+    # ── Static SPA ──────────────────────────────────────────────────────────
+    location / {
+        proxy_pass http://web_upstream;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # ── Auth API ────────────────────────────────────────────────────────────
+    # The refresh cookie is path-scoped to /auth-api/auth, so the prefix is
+    # preserved (no rewrite) and the cookie flows back on refresh/logout.
+    location /auth-api/ {
+        proxy_pass http://auth_upstream;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Rate-limit login attempts at the edge (defense in depth on top of the
+    # Redis-backed limiter inside auth-server).
+    location = /auth-api/auth/login {
+        limit_req zone=login burst=10 nodelay;
+        proxy_pass http://auth_upstream;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # ── CRM API ─────────────────────────────────────────────────────────────
+    location /crm-api/ {
+        proxy_pass http://crm_upstream;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # ── Socket.IO websocket upgrade ─────────────────────────────────────────
+    location /crm-api/socket.io/ {
+        proxy_pass http://crm_upstream;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 86400s;
+        proxy_send_timeout 86400s;
+    }
+}
