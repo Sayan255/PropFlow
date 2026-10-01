@@ -28,7 +28,7 @@ services:
     plan: free
     ipAllowList: []            # private-network access from auth/crm only
     maxmemoryPolicy: noeviction
-    persistenceMode: none      # free plan; refresh tokens re-seed on login
+    persistenceMode: off       # free plan (required value; journal-snapshot is paid only)
 
   # ── auth-server (Render free) ─────────────────────────────────────────────
   - type: pserv
