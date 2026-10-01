@@ -168,7 +168,7 @@ async function seedInteractions() {
     await ChatMessage.bulkCreate([
       { propertyId: p.id, tenantId: TENANT_A, userId: agentId, clientMsgId: `seed-${p.id}-1`, body: 'Site visit confirmed for this week.' },
       { propertyId: p.id, tenantId: TENANT_A, userId: '11111111-1111-4111-8111-0000000000a2', clientMsgId: `seed-${p.id}-2`, body: 'Share pics with the buyer lead please.' },
-    ]);
+    ], { ignoreDuplicates: true });
   }
 }
 

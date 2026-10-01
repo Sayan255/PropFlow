@@ -133,7 +133,7 @@ services:
       - key: CORS_ORIGIN
         value: https://propflow-sayan.onrender.com
       - key: EXPORT_MAX_ROWS
-        value: "5000"
+        value: "50000"   # H11: full 10k export must succeed
       - key: ENABLE_CRON
         value: "true"          # harmless if asleep; single replica owns the lock
       - key: SEED_PROPERTIES_PER_TENANT
