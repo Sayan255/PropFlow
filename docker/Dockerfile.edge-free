@@ -7,6 +7,9 @@
 # auth/crm web services over their public HTTPS URLs (free plan = no private
 # DNS, hence the separate Dockerfile.edge does not work here).
 FROM nginx:1.27-alpine
+# The stock conf.d/default.conf would win the listen-80 race (alphabetical
+# load order) and shadow our template's server block — remove it.
+RUN rm -f /etc/nginx/conf.d/default.conf
 COPY docker/edge-free.conf.template /etc/nginx/templates/edge-free.conf.template
 ENV NGINX_ENVSUBST_OUTPUT_DIR=/etc/nginx/conf.d
 COPY apps/web/dist /usr/share/nginx/html
