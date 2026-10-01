@@ -35,12 +35,14 @@ server {
     }
 
     # ── Auth API ────────────────────────────────────────────────────────────
-    # Trailing slash on proxy_pass strips the /auth-api prefix (Vite dev-proxy
-    # parity). The refresh cookie is path-scoped to /auth-api/auth and passes
-    # through untouched.
+    # Variable proxy_pass does NOT do the static trailing-slash prefix strip,
+    # so the /auth-api prefix is removed with an explicit rewrite; auth then
+    # sees /auth/... exactly like the Vite dev proxy. The refresh cookie is
+    # path-scoped to /auth-api/auth and passes through untouched.
     location = /auth-api/auth/login {
         limit_req zone=login burst=10 nodelay;
         set $auth_host "propflow-free-auth.onrender.com";
+        rewrite ^/auth-api(/.*)$ $1 break;
         proxy_ssl_server_name on;
         proxy_ssl_name $auth_host;
         proxy_set_header Host $auth_host;
@@ -52,10 +54,11 @@ server {
 
     location /auth-api/ {
         set $auth_host "propflow-free-auth.onrender.com";
+        rewrite ^/auth-api(/.*)$ $1 break;
         proxy_ssl_server_name on;
         proxy_ssl_name $auth_host;
         proxy_set_header Host $auth_host;
-        proxy_pass https://$auth_host/;
+        proxy_pass https://$auth_host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
@@ -64,10 +67,11 @@ server {
     # ── CRM API ─────────────────────────────────────────────────────────────
     location /crm-api/socket.io/ {
         set $crm_host "propflow-free-crm.onrender.com";
+        rewrite ^/crm-api(/.*)$ $1 break;
         proxy_ssl_server_name on;
         proxy_ssl_name $crm_host;
         proxy_set_header Host $crm_host;
-        proxy_pass https://$crm_host/socket.io/;
+        proxy_pass https://$crm_host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
@@ -79,10 +83,11 @@ server {
 
     location /crm-api/ {
         set $crm_host "propflow-free-crm.onrender.com";
+        rewrite ^/crm-api(/.*)$ $1 break;
         proxy_ssl_server_name on;
         proxy_ssl_name $crm_host;
         proxy_set_header Host $crm_host;
-        proxy_pass https://$crm_host/;
+        proxy_pass https://$crm_host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
