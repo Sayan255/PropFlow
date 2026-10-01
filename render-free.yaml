@@ -127,8 +127,9 @@ services:
       # ── HTTP + auth dependency ─────────────────────────────────────────────
       - key: CRM_PORT
         value: "4002"
+      # Free plan has no private DNS: reach auth over its public HTTPS URL.
       - key: AUTH_JWKS_URL
-        value: http://propflow-free-auth:4001/.well-known/jwks.json
+        value: https://propflow-free-auth.onrender.com/.well-known/jwks.json
       - key: CORS_ORIGIN
         sync: false
       - key: EXPORT_MAX_ROWS
@@ -136,30 +137,21 @@ services:
       - key: ENABLE_CRON
         value: "true"          # harmless if asleep; single replica owns the lock
       - key: SEED_PROPERTIES_PER_TENANT
-        value: "200"           # keep first boot fast on free compute + TiDB
-
-  # ── The only public entrypoint: edge nginx (SPA + API proxying) ───────────
+        value: "200"           # keep first boot fast on free compute + TiDB  # ── The only public entrypoint: edge nginx (SPA + API proxying) ───────────
+  # The SPA is baked into this image (see Dockerfile.edge-free), so there is
+  # no separate web service and no WEB_UPSTREAM. Upstreams are the public
+  # HTTPS URLs of the auth/crm web services — free plan has no private DNS.
   - type: web
     name: propflow-free-edge
     runtime: docker
-    dockerfilePath: docker/Dockerfile.edge
+    dockerfilePath: docker/Dockerfile.edge-free
     dockerContext: .
     plan: free
     healthCheckPath: /healthz
     envVars:
       - key: AUTH_UPSTREAM
-        value: propflow-free-auth:4001
+        value: propflow-free-auth.onrender.com:443
       - key: CRM_UPSTREAM
-        value: propflow-free-crm:4002
-      - key: WEB_UPSTREAM
-        value: propflow-free-web:80
+        value: propflow-free-crm.onrender.com:443
       - key: LOGIN_RATE_LIMIT
         value: 30r/m
-
-  # ── SPA (free WEB service; the edge serves it) ────────────────────────────
-  - type: web
-    name: propflow-free-web
-    runtime: docker
-    dockerfilePath: docker/Dockerfile.web
-    dockerContext: .
-    plan: free

@@ -1,0 +1,81 @@
+# PropFlow edge — FREE tier variant.
+# ${AUTH_UPSTREAM} / ${CRM_UPSTREAM} are filled by nginx envsubst at start.
+# Free-plan services are public web services, so upstreams are their public
+# hostnames over TLS (internal pserv DNS does not exist on the free plan).
+# The SPA is baked into this image (no separate web container).
+limit_req_zone $binary_remote_addr zone=login:10m rate=${LOGIN_RATE_LIMIT};
+limit_req_status 429;
+
+upstream auth_upstream { server ${AUTH_UPSTREAM}; }
+upstream crm_upstream  { server ${CRM_UPSTREAM}; }
+
+server {
+    listen 80;
+    server_name _;
+
+    proxy_http_version 1.1;
+    proxy_ssl_server_name on;   # upstreams are *.onrender.com — SNI required
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # ── Health check (Render polls this) ────────────────────────────────────
+    location = /healthz {
+        access_log off;
+        default_type text/plain;
+        return 200 "edge ok\n";
+    }
+
+    # ── Static SPA (built into this image) ──────────────────────────────────
+    location /assets/ {
+        access_log off;
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        try_files $uri =404;
+    }
+
+    location / {
+        try_files $uri /index.html;
+    }
+
+    # ── Auth API ────────────────────────────────────────────────────────────
+    # Trailing slash strips the /auth-api prefix (Vite dev-proxy parity).
+    # The refresh cookie is path-scoped to /auth-api/auth and passes through.
+    location = /auth-api/auth/login {
+        limit_req zone=login burst=10 nodelay;
+        proxy_pass https://auth_upstream;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /auth-api/ {
+        proxy_pass https://auth_upstream/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # ── CRM API ─────────────────────────────────────────────────────────────
+    location /crm-api/socket.io/ {
+        proxy_pass https://crm_upstream/socket.io/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 86400s;
+        proxy_send_timeout 86400s;
+    }
+
+    location /crm-api/ {
+        proxy_pass https://crm_upstream/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}

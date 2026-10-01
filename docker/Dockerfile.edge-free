@@ -1,0 +1,27 @@
+# PropFlow — edge for the FREE tier (single public container).
+# Builds the SPA itself and serves it statically, then proxies /auth-api and
+# /crm-api to the auth/crm web services over their public HTTPS URLs.
+# (Render's free plan has no private services, so there is no internal DNS —
+# the pserv-based edge in Dockerfile.edge only works on paid plans.)
+FROM node:20-alpine AS build
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+COPY packages/shared/package.json packages/shared/
+COPY apps/web/package.json apps/web/
+COPY tsconfig.base.json ./
+RUN npm ci --no-audit --no-fund
+
+COPY packages/shared/ packages/shared/
+COPY tsconfig.base.json ./
+COPY apps/web/ apps/web/
+# 512MB free builders: vite only, capped heap (typecheck stays in CI).
+ENV NODE_OPTIONS=--max-old-space-size=460
+RUN npx vite build apps/web
+
+FROM nginx:1.27-alpine
+COPY docker/edge-free.conf.template /etc/nginx/templates/edge-free.conf.template
+ENV NGINX_ENVSUBST_OUTPUT_DIR=/etc/nginx/conf.d
+COPY --from=build /app/apps/web/dist /usr/share/nginx/html
+
+EXPOSE 80
