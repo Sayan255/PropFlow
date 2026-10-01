@@ -1,20 +1,16 @@
 # PropFlow edge — FREE tier variant.
-# ${AUTH_UPSTREAM} / ${CRM_UPSTREAM} are filled by nginx envsubst at start.
-# Free-plan services are public web services, so upstreams are their public
-# hostnames over TLS (internal pserv DNS does not exist on the free plan).
-# The SPA is baked into this image (no separate web container).
+# Free-plan services are public web services whose IPs change on every
+# wake/redeploy, so nginx must resolve upstreams at REQUEST time (variable
+# proxy_pass + resolver), not at config load. The Host header must be the
+# upstream's hostname: Render's router routes on Host.
 limit_req_zone $binary_remote_addr zone=login:10m rate=${LOGIN_RATE_LIMIT};
 limit_req_status 429;
 
-upstream auth_upstream { server ${AUTH_UPSTREAM}; }
-upstream crm_upstream  { server ${CRM_UPSTREAM}; }
+resolver 8.8.8.8 1.1.1.1 valid=30s ipv6=off;
 
 server {
     listen 80;
     server_name _;
-
-    proxy_http_version 1.1;
-    proxy_ssl_server_name on;   # upstreams are *.onrender.com — SNI required
 
     root /usr/share/nginx/html;
     index index.html;
@@ -39,20 +35,27 @@ server {
     }
 
     # ── Auth API ────────────────────────────────────────────────────────────
-    # Trailing slash strips the /auth-api prefix (Vite dev-proxy parity).
-    # The refresh cookie is path-scoped to /auth-api/auth and passes through.
+    # Trailing slash on proxy_pass strips the /auth-api prefix (Vite dev-proxy
+    # parity). The refresh cookie is path-scoped to /auth-api/auth and passes
+    # through untouched.
     location = /auth-api/auth/login {
         limit_req zone=login burst=10 nodelay;
-        proxy_pass https://auth_upstream;
-        proxy_set_header Host $host;
+        set $auth_host "propflow-free-auth.onrender.com";
+        proxy_ssl_server_name on;
+        proxy_ssl_name $auth_host;
+        proxy_set_header Host $auth_host;
+        proxy_pass https://$auth_host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
     location /auth-api/ {
-        proxy_pass https://auth_upstream/;
-        proxy_set_header Host $host;
+        set $auth_host "propflow-free-auth.onrender.com";
+        proxy_ssl_server_name on;
+        proxy_ssl_name $auth_host;
+        proxy_set_header Host $auth_host;
+        proxy_pass https://$auth_host/;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
@@ -60,8 +63,11 @@ server {
 
     # ── CRM API ─────────────────────────────────────────────────────────────
     location /crm-api/socket.io/ {
-        proxy_pass https://crm_upstream/socket.io/;
-        proxy_set_header Host $host;
+        set $crm_host "propflow-free-crm.onrender.com";
+        proxy_ssl_server_name on;
+        proxy_ssl_name $crm_host;
+        proxy_set_header Host $crm_host;
+        proxy_pass https://$crm_host/socket.io/;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
@@ -72,8 +78,11 @@ server {
     }
 
     location /crm-api/ {
-        proxy_pass https://crm_upstream/;
-        proxy_set_header Host $host;
+        set $crm_host "propflow-free-crm.onrender.com";
+        proxy_ssl_server_name on;
+        proxy_ssl_name $crm_host;
+        proxy_set_header Host $crm_host;
+        proxy_pass https://$crm_host/;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
