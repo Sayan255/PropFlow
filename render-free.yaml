@@ -81,9 +81,9 @@ services:
       - key: COOKIE_SAME_SITE
         value: "none"
       - key: CORS_ORIGIN
-        sync: false            # filled after first deploy: https://propflow-free-edge-xxxx.onrender.com
+        value: https://propflow-sayan.onrender.com
       - key: FRONTEND_URL
-        sync: false
+        value: https://propflow-sayan.onrender.com
       - key: SEED_PASSWORD
         sync: false
       - key: JWT_PRIVATE_KEY
@@ -131,7 +131,7 @@ services:
       - key: AUTH_JWKS_URL
         value: https://propflow-free-auth.onrender.com/.well-known/jwks.json
       - key: CORS_ORIGIN
-        sync: false
+        value: https://propflow-sayan.onrender.com
       - key: EXPORT_MAX_ROWS
         value: "5000"
       - key: ENABLE_CRON
@@ -139,19 +139,16 @@ services:
       - key: SEED_PROPERTIES_PER_TENANT
         value: "200"           # keep first boot fast on free compute + TiDB  # ── The only public entrypoint: edge nginx (SPA + API proxying) ───────────
   # The SPA is baked into this image (see Dockerfile.edge-free), so there is
-  # no separate web service and no WEB_UPSTREAM. Upstreams are the public
-  # HTTPS URLs of the auth/crm web services — free plan has no private DNS.
+  # no separate web service. The nginx template reaches auth/crm over their
+  # public HTTPS URLs — free plan has no private DNS (hosts are hardcoded in
+  # docker/edge-free.conf.template).
   - type: web
-    name: propflow-free-edge
+    name: propflow-sayan
     runtime: docker
     dockerfilePath: docker/Dockerfile.edge-free
     dockerContext: .
     plan: free
     healthCheckPath: /healthz
     envVars:
-      - key: AUTH_UPSTREAM
-        value: propflow-free-auth.onrender.com:443
-      - key: CRM_UPSTREAM
-        value: propflow-free-crm.onrender.com:443
       - key: LOGIN_RATE_LIMIT
         value: 30r/m
