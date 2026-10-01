@@ -6,7 +6,13 @@
 #
 #   MySQL  → TiDB Cloud Serverless (free, MySQL wire-compatible, TLS, no card)
 #   Redis  → Render Key Value `free` plan (25MB, one per workspace, no card)
-#   auth/crm/edge → Render `free` web/private services
+#   auth/crm/web/edge → Render `free` WEB services
+#
+# NOTE: Render's free plan no longer offers `pserv` (private services) —
+# "service type is not available for this plan" — so auth/crm/web run as
+# regular (public-URL) web services. Their routes are JWT-protected and CORS
+# only allows your edge origin, so the public URLs are inert for browsers and
+# useless without a valid token. Don't share them; share only the edge URL.
 #
 # Tradeoffs vs render.yaml (paid): free services SLEEP after ~15 min idle
 # (first request wakes them in ~30–60s), WebSockets/chat are unreliable right
@@ -30,8 +36,8 @@ services:
     maxmemoryPolicy: noeviction
     persistenceMode: off       # free plan (required value; journal-snapshot is paid only)
 
-  # ── auth-server (Render free) ─────────────────────────────────────────────
-  - type: pserv
+  # ── auth-server (Render free WEB service; JWT-protected routes only) ──────
+  - type: web
     name: propflow-free-auth
     runtime: docker
     dockerfilePath: docker/Dockerfile.auth
@@ -85,8 +91,8 @@ services:
       - key: JWT_PUBLIC_KEY
         sync: false
 
-  # ── crm-api (Render free) ─────────────────────────────────────────────────
-  - type: pserv
+  # ── crm-api (Render free WEB service; JWT-protected routes only) ──────────
+  - type: web
     name: propflow-free-crm
     runtime: docker
     dockerfilePath: docker/Dockerfile.crm
@@ -150,8 +156,8 @@ services:
       - key: LOGIN_RATE_LIMIT
         value: 30r/m
 
-  # ── SPA (private; edge serves it) ─────────────────────────────────────────
-  - type: pserv
+  # ── SPA (free WEB service; the edge serves it) ────────────────────────────
+  - type: web
     name: propflow-free-web
     runtime: docker
     dockerfilePath: docker/Dockerfile.web
