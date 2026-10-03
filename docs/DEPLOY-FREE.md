@@ -1,29 +1,29 @@
-# PropFlow on Render — FREE tier (no credit card)
+# PropFlow on Render — always-on application services with TiDB
 
 Same single-origin architecture as the paid blueprint (`render.yaml`): one public
 **edge** service serves the React app **and** proxies `/auth-api` + `/crm-api`,
-so the browser talks to exactly one URL — **no `VITE_API_ORIGIN` needed**. The
-difference: MySQL and Redis run on free external providers instead of paid
-Render services.
+so the browser talks to exactly one URL — **no `VITE_API_ORIGIN` needed**. This
+variant keeps MySQL on TiDB and uses paid, always-on Render plans for the
+application services. It retains the service names from the existing Free
+Blueprint so Render can update those resources in place.
 
 | Piece | Service | Cost |
 |---|---|---|
 | MySQL | [TiDB Cloud Serverless](https://tidbcloud.com) (MySQL wire-compatible) | free, no card |
-| Redis | Render Key Value `free` plan (25MB) | free, no card |
-| auth / crm / edge / SPA | Render `free` services | free, no card |
+| Redis | Render Key Value 256MB with persistence | Render plan charges apply |
+| auth / crm / edge / SPA | Render Starter web services | Render plan charges apply |
 
-**Honest tradeoffs vs the paid blueprint:** free Render services sleep after
-~15 minutes idle and take ~30–60s to wake; chat/WebSockets are unreliable right
-after a wake; the visit-reminder cron only fires while awake; TiDB Serverless
-throttles heavy bursts. For a hiring demo: open the site a minute before you
-present. The full-fat always-on option stays in [render.yaml](render.yaml) +
-[DEPLOY-RENDER.md](DEPLOY-RENDER.md) (~$65–70/mo).
+Free Render services sleep after about 15 minutes idle, so they cannot provide
+reliable always-on login. Syncing the plan changes in this Blueprint incurs
+Render charges; review the current amounts in Render before applying. TiDB
+Serverless may also throttle heavy bursts.
 
 ## Step 0 — Deploy the code
 
 The blueprint is `render-free.yaml` at the repo root. Render's Blueprint dialog
-has a **Blueprint Path** field — enter `render-free.yaml` there (the plain
-`render.yaml` is the paid variant; pick one, not both).
+has a **Blueprint Path** field — enter `render-free.yaml` there. It upgrades
+the existing app services and Redis to always-on paid plans and keeps TiDB.
+Review the plan and price changes before applying them.
 
 ## Step 1 — Create the free TiDB database
 
@@ -88,12 +88,6 @@ Docker builds + migrations + seeding).
 `viewer@tenant-a.local`, `admin@tenant-b.local`, … — all with `SEED_PASSWORD`.
 Full role matrix in [README.md](README.md).
 
-## Waking a sleeping deploy
-
-Free services sleep when idle. First request takes ~30–60s — just refresh.
-To pre-warm before a demo: open the site, then hit
-`https://<edge-url>/auth-api/health` once.
-
 ## Troubleshooting
 
 - **auth crash-loops with `ER_...` / `ETIMEDOUT`** → TiDB host/user/password
@@ -101,9 +95,9 @@ To pre-warm before a demo: open the site, then hit
   Check the service **Logs** tab; fix the env var; the service redeploys.
 - **`Access denied for user`** → TiDB usernames include the `.root` suffix —
   copy it exactly.
-- **crm health shows `jwks: false`** → auth isn't reachable yet on the private
-  network; it self-heals once auth is Live (free deploys start in parallel).
+- **crm health shows `jwks: false`** → auth isn't reachable yet; it self-heals
+  once auth is Live (services may start in parallel).
 - **Unknown kid / 401 after login** → the JWT keys were changed after tokens
   were issued; log out/in again.
 - **`Too many connections`** → TiDB Serverless limits concurrent connections;
-  restart the auth/crm services to drain stale pools after heavy sleeping.
+  restart the auth/crm services to drain stale pools after heavy use.

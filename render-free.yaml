@@ -1,12 +1,12 @@
-# PropFlow on Render — FREE tier, no credit card
+# PropFlow on Render — always-on application services with TiDB external
 #
 # Same architecture as render.yaml (edge nginx serves SPA + proxies /auth-api
 # and /crm-api, so the browser uses ONE origin — no VITE_API_ORIGIN needed),
 # but MySQL and Redis move to free external providers:
 #
 #   MySQL  → TiDB Cloud Serverless (free, MySQL wire-compatible, TLS, no card)
-#   Redis  → Render Key Value `free` plan (25MB, one per workspace, no card)
-#   auth/crm/web/edge → Render `free` WEB services
+#   Redis  → Render Key Value 256MB plan with persistence
+#   auth/crm/edge → Render Starter web services (always on)
 #
 # NOTE: Render's free plan no longer offers `pserv` (private services) —
 # "service type is not available for this plan" — so auth/crm/web run as
@@ -14,9 +14,9 @@
 # only allows your edge origin, so the public URLs are inert for browsers and
 # useless without a valid token. Don't share them; share only the edge URL.
 #
-# Tradeoffs vs render.yaml (paid): free services SLEEP after ~15 min idle
-# (first request wakes them in ~30–60s), WebSockets/chat are unreliable right
-# after a wake, and crons only fire while awake. Fine for a hiring demo.
+# This blueprint keeps the existing service names and TiDB database settings,
+# but uses paid always-on app plans. Syncing these plan changes in Render will
+# incur Render charges. A Free plan cannot provide reliable always-on login.
 #
 # TiDB prep (before deploying): one TiDB Serverless cluster; in its SQL console:
 #   CREATE DATABASE IF NOT EXISTS auth_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -28,21 +28,21 @@ previews:
   generation: off
 
 services:
-  # ── Redis-compatible cache (Render Key Value, free 25MB) ──────────────────
+  # ── Redis-compatible cache (paid 256MB, persistent) ───────────────────────
   - type: keyvalue
     name: propflow-free-redis
-    plan: free
+    plan: 256mb
     ipAllowList: []            # private-network access from auth/crm only
     maxmemoryPolicy: noeviction
-    persistenceMode: off       # free plan (required value; journal-snapshot is paid only)
+    persistenceMode: journal-snapshot
 
-  # ── auth-server (Render free WEB service; JWT-protected routes only) ──────
+  # ── auth-server (always-on web service; JWT-protected routes only) ────────
   - type: web
     name: propflow-free-auth
     runtime: docker
     dockerfilePath: docker/Dockerfile.auth
     dockerContext: .
-    plan: free
+    plan: 0.5c-512mb
     healthCheckPath: /health   # Render restarts the container when this fails
     envVars:
       - key: NODE_ENV
@@ -62,7 +62,7 @@ services:
         value: auth_db
       - key: MYSQL_SSL
         value: "true"          # TiDB terminates TLS
-      # ── Redis (Render free Key Value) ─────────────────────────────────────
+      # ── Redis (Render Key Value) ──────────────────────────────────────────
       - key: REDIS_URL
         fromService:
           name: propflow-free-redis
@@ -92,13 +92,13 @@ services:
       - key: JWT_PUBLIC_KEY
         sync: false
 
-  # ── crm-api (Render free WEB service; JWT-protected routes only) ──────────
+  # ── crm-api (always-on web service; JWT-protected routes only) ────────────
   - type: web
     name: propflow-free-crm
     runtime: docker
     dockerfilePath: docker/Dockerfile.crm
     dockerContext: .
-    plan: free
+    plan: 0.5c-512mb
     healthCheckPath: /health   # Render restarts the container when this fails
     envVars:
       - key: NODE_ENV
@@ -139,7 +139,9 @@ services:
       - key: ENABLE_CRON
         value: "true"          # harmless if asleep; single replica owns the lock
       - key: SEED_PROPERTIES_PER_TENANT
-        value: "200"           # keep first boot fast on free compute + TiDB  # ── The only public entrypoint: edge nginx (SPA + API proxying) ───────────
+        value: "200"           # keep first boot fast on TiDB
+
+  # ── The only public entrypoint: edge nginx (SPA + API proxying) ───────────
   # The SPA is baked into this image (see Dockerfile.edge-free), so there is
   # no separate web service. The nginx template reaches auth/crm over their
   # public HTTPS URLs — free plan has no private DNS (hosts are hardcoded in
@@ -149,7 +151,7 @@ services:
     runtime: docker
     dockerfilePath: docker/Dockerfile.edge-free
     dockerContext: .
-    plan: free
+    plan: 0.5c-512mb
     healthCheckPath: /healthz
     envVars:
       - key: LOGIN_RATE_LIMIT
