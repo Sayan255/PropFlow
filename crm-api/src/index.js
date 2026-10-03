@@ -10,8 +10,28 @@ import { startReminderJob, startStaleJob } from './cron/index.js';
 const app = buildApp();
 const server = http.createServer(app);
 
+/**
+ * Race a MySQL connection against a hard timeout. TiDB (free tier) can stall
+ * the handshake indefinitely; without this the bootstrap awaits forever, the
+ * server never listens, and Render keeps the wedged instance up (seen live on
+ * the paired auth service 2026-10-02). Failing fast lets the container restart.
+ */
+async function connectDbWithTimeout(ms) {
+  let timer;
+  try {
+    await Promise.race([
+      sequelize.authenticate(),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`mysql connect timed out after ${ms}ms`)), ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 async function start() {
-  await sequelize.authenticate();
+  await connectDbWithTimeout(30_000);
   logger.info('mysql connected');
   await attachRealtime(server);
   if (!config.isProd || process.env.ENABLE_CRON !== 'false') {
@@ -23,6 +43,8 @@ async function start() {
 
 function shutdown(signal) {
   logger.info({ signal }, 'shutting down');
+  // If sequelize.close() itself hangs (same failure class as boot), the timer
+  // still force-exits; exit(0) so a SIGTERM restart is clean, not a crash loop.
   server.close(async () => {
     try {
       await sequelize.close();
@@ -32,7 +54,7 @@ function shutdown(signal) {
     }
     process.exit(0);
   });
-  setTimeout(() => process.exit(1), 10_000).unref();
+  setTimeout(() => process.exit(0), 10_000).unref();
 }
 
 process.on('SIGTERM', () => shutdown('SIGTERM'));

@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Box, CircularProgress } from '@mui/material';
 import { installTokenBridge } from './app/slices/authSlice';
-import { resetRefreshFlight } from './app/baseQueryWithReauth';
+import { resetRefreshFlight, startBackendKeepAlive } from './app/baseQueryWithReauth';
 import { useAppDispatch, useAppSelector } from './app/hooks';
 import { DEFAULT_LANDING_BY_ROLE, PUBLIC_ROUTES } from '@propflow/shared';
 import LoginPage from './pages/LoginPage';
@@ -31,6 +31,7 @@ export default function App() {
   useEffect(() => {
     installTokenBridge(dispatch);
     resetRefreshFlight();
+    startBackendKeepAlive();
   }, [dispatch]);
 
   const isPublic = PUBLIC_ROUTES.some((p) => location.pathname.startsWith(p));

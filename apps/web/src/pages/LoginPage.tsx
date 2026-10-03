@@ -39,6 +39,7 @@ export default function LoginPage() {
   const [params] = useSearchParams();
   const next = params.get('next');
   const [serverError, setServerError] = useState<string | null>(null);
+  const [waking, setWaking] = useState<string | null>(null);
   const [attemptsRemaining, setAttemptsRemaining] = useState<number | null>(null);
   const [lockUntil, setLockUntil] = useState<number | null>(null);
   const [now, setNow] = useState(Date.now());
@@ -58,7 +59,11 @@ export default function LoginPage() {
     setServerError(null);
     setSubmitting(true);
     try {
-      const { status, data } = await authFetch('/auth/login', values);
+      const { status, data } = await authFetch('/auth/login', values, 'POST', (attempt, total) => {
+        setServerError(null);
+        setWaking(`Backend is waking up (free tier sleeps when idle) — retrying, attempt ${attempt} of ${total}…`);
+      });
+      setWaking(null);
       if (status === 200 && data.accessToken && data.user) {
         dispatch(credentialsReceived({ accessToken: data.accessToken, user: data.user, expiresIn: data.expiresIn }));
         const role = data.user.role as Role;
@@ -83,6 +88,7 @@ export default function LoginPage() {
       void code;
     } finally {
       setSubmitting(false);
+      setWaking(null);
     }
   };
 
@@ -99,6 +105,11 @@ export default function LoginPage() {
             Multi-Tenant Real Estate CRM
           </Typography>
 
+          {waking && (
+            <Alert severity="info" sx={{ mb: 2 }}>
+              {waking}
+            </Alert>
+          )}
           {serverError && (
             <Alert severity={locked ? 'warning' : 'error'} sx={{ mb: 2 }}>
               {serverError}

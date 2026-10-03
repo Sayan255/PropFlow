@@ -85,8 +85,27 @@ export interface AuthResponse {
   error?: { code?: string; message?: string; details?: Record<string, unknown> };
 }
 
-/** Direct fetch helper for auth endpoints (login/refresh cookie flow). */
-export async function authFetch(path: string, body?: unknown, method = 'POST'): Promise<{ status: number; data: AuthResponse }> {
+/**
+ * Direct fetch helper for auth endpoints (login/refresh cookie flow).
+ *
+ * Free-tier Render services sleep after ~15 min idle and take up to a few
+ * minutes to wake; during the wake the edge returns an HTML page (or the
+ * request hangs) instead of JSON. Those are transient: retry them with a
+ * delay instead of failing. ANY parseable JSON response (200, 401, 429, 500…)
+ * is a real app answer and returns immediately without retrying.
+ */
+const WAKE_MAX_ATTEMPTS = 8;
+const WAKE_RETRY_DELAY_MS = 15_000;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function authFetchAttempt(
+  path: string,
+  body?: unknown,
+  method = 'POST',
+): Promise<{ status: number; data: AuthResponse; retriable: boolean }> {
   let res: Response;
   try {
     res = await fetch(`${API_ORIGIN}${AUTH_BASE}${path}`, {
@@ -98,24 +117,67 @@ export async function authFetch(path: string, body?: unknown, method = 'POST'): 
   } catch {
     return {
       status: 0,
+      retriable: true,
       data: { error: { code: 'NETWORK_ERROR', message: 'Cannot reach the API server. Check your internet connection or whether the backend is deployed.' } },
     };
   }
   let data: AuthResponse = {};
+  let retriable = false;
   const text = await res.text();
   if (text) {
     try {
       data = JSON.parse(text) as AuthResponse;
     } catch {
-      // Non-JSON body (e.g. an SPA fallback served for an API path when the
-      // backend is missing). Surface a clean message instead of raw HTML.
+      // Non-JSON body: a free-tier service was asleep/booting and its platform
+      // page came back for an API path. Retriable — not a real app error.
+      retriable = true;
       data = {
         error: {
           code: 'BAD_RESPONSE',
-          message: 'The API returned an unexpected response (page instead of JSON). The backend services are probably not deployed yet.',
+          message: 'The backend is waking up (free-tier services sleep when idle). Please wait a moment…',
         },
       };
     }
   }
-  return { status: res.status, data };
+  return { status: res.status, data, retriable };
+}
+
+export async function authFetch(
+  path: string,
+  body?: unknown,
+  method = 'POST',
+  onRetry?: (attempt: number, total: number) => void,
+): Promise<{ status: number; data: AuthResponse }> {
+  let last!: { status: number; data: AuthResponse; retriable: boolean };
+  for (let attempt = 1; attempt <= WAKE_MAX_ATTEMPTS; attempt++) {
+    last = await authFetchAttempt(path, body, method);
+    if (!last.retriable) return { status: last.status, data: last.data };
+    if (attempt < WAKE_MAX_ATTEMPTS) {
+      onRetry?.(attempt, WAKE_MAX_ATTEMPTS);
+      await sleep(WAKE_RETRY_DELAY_MS);
+    }
+  }
+  return { status: last.status, data: last.data };
+}
+
+/**
+ * Free-tier keep-warm: ping both services' /health while the tab is visible so
+ * an open PropFlow tab doesn't go dead mid-session (Render sleeps a service
+ * after ~15 min without requests). Background tabs are skipped so we don't
+ * burn the 750 free instance-hours/month when nobody is looking.
+ */
+const KEEP_ALIVE_INTERVAL_MS = 3 * 60_000;
+let keepAliveStarted = false;
+
+export function startBackendKeepAlive(): void {
+  if (typeof window === 'undefined' || keepAliveStarted) return;
+  keepAliveStarted = true;
+  const ping = () => {
+    if (document.hidden) return;
+    void fetch(`${API_ORIGIN}${AUTH_BASE}/health`).catch(() => undefined);
+    void fetch(`${API_ORIGIN}${CRM_BASE}/health`).catch(() => undefined);
+  };
+  ping();
+  window.setInterval(ping, KEEP_ALIVE_INTERVAL_MS);
+  document.addEventListener('visibilitychange', ping);
 }

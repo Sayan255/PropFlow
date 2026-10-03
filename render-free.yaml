@@ -43,6 +43,7 @@ services:
     dockerfilePath: docker/Dockerfile.auth
     dockerContext: .
     plan: free
+    healthCheckPath: /health   # Render restarts the container when this fails
     envVars:
       - key: NODE_ENV
         value: production
@@ -98,6 +99,7 @@ services:
     dockerfilePath: docker/Dockerfile.crm
     dockerContext: .
     plan: free
+    healthCheckPath: /health   # Render restarts the container when this fails
     envVars:
       - key: NODE_ENV
         value: production
